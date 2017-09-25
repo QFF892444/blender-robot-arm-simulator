@@ -4,13 +4,13 @@ bl_info = {
 }
 
 
-import math
+import math, sys, importlib
 import bpy
 from mathutils import Vector
 from bpy.props import FloatProperty
-
-# store keymaps here to access after registration
-addon_keymaps = []
+from .common import output
+import addon_utils
+from .DH_helper import DHDrawer
 
 
 class ArmControlPanel(bpy.types.Panel):
@@ -35,7 +35,11 @@ class ArmControlPanel(bpy.types.Panel):
         drawJointAngleUI(scene, layout, 5)
         drawJointAngleUI(scene, layout, 6)
 
+        #layout.separator()
+        #layout.row().operator(RunScript.bl_idname, text="绘制 D-H 辅助线")
 
+        layout.separator()
+        layout.row().operator(RunScript.bl_idname, text="执行脚本")
 
 
 def drawJointAngleUI(obj, layout, index) :
@@ -73,9 +77,9 @@ class SetJointValue(bpy.types.Operator):
     def execute(self, context):
 
         if self.request_position=="min" :
-            value = 0
+            value = - meta_joints[self.joint_index]['max']
         elif self.request_position=="middle" :
-            value = meta_joints[self.joint_index]['max'] / 2
+            value = 0
         elif self.request_position=="max" :
             value = meta_joints[self.joint_index]['max']
 
@@ -98,48 +102,68 @@ class InitAllJointsValue(bpy.types.Operator):
 
         for idx in range(1,7) :
             joint_name = "joint"+str(idx)+"_value"
-            context.scene[joint_name] = meta_joints[idx]['max']/2
+            context.scene[joint_name] = 0
             meta_joints[idx]['update'](self, context)
 
         return {"FINISHED"}
 
+
+scriptcache = {}
+class RunScript(bpy.types.Operator):
+    bl_idname = "view3d.run_my_script"
+    bl_label = "run my script"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        modulename = "DH_helper"
+
+        print(sys.modules.get("robot-arm-simulation.DH_helper"))
+        if modulename in scriptcache :
+            importlib.reload(scriptcache[modulename])
+        else:
+            from . import script
+            scriptcache[modulename] = script
+        return {"FINISHED"}
+
+
 meta_joints = {
     1: {
-        "max": 270,
+        "max": 135,
         "axle": 2,
         "update": createJointValueUpdate(1)
     },
     2: {
-        "max": 180,
+        "max": 90,
         "axle": 1,
         "update": createJointValueUpdate(2)
     },
     3: {
-        "max": 270,
+        "max": 135,
         "axle": 1,
         "update": createJointValueUpdate(3)
     },
     4: {
-        "max": 180,
+        "max": 90,
         "axle": 2,
         "update": createJointValueUpdate(4)
     },
     5: {
-        "max": 270,
+        "max": 135,
         "axle": 1,
         "update": createJointValueUpdate(5)
     },
     6: {
-        "max": 180,
+        "max": 90,
         "axle": 2,
         "update": createJointValueUpdate(6)
     },
 
 }
 
-def register():
-    print("register()")
+addon_keymaps = []
 
+def register():
     bpy.types.Scene.joint1_value = FloatProperty(update=meta_joints[1]["update"])
     bpy.types.Scene.joint2_value = FloatProperty(update=meta_joints[2]["update"])
     bpy.types.Scene.joint3_value = FloatProperty(update=meta_joints[3]["update"])
@@ -150,6 +174,8 @@ def register():
     bpy.utils.register_class(ArmControlPanel)
     bpy.utils.register_class(SetJointValue)
     bpy.utils.register_class(InitAllJointsValue)
+    bpy.utils.register_class(DHDrawer)
+    bpy.utils.register_class(RunScript)
 
     # handle the keymap
     wm = bpy.context.window_manager
@@ -158,16 +184,14 @@ def register():
         km = kc.keymaps.new('3D View')
     else:
         km = kc.keymaps['3D View']
-    # if kc:
-        # addon_keymaps.append((km, km.keymap_items.new(CursorToSelected.bl_idname, 'R', 'PRESS', ctrl=True)))
-        # addon_keymaps.append((km, km.keymap_items.new(SetOriginToSelected.bl_idname, 'Q', 'PRESS', alt=True)))
-        # addon_keymaps.append((km, km.keymap_items.new(MoveSelectedsToActive.bl_idname, 'W', 'PRESS', ctrl=True)))
-        # addon_keymaps.append((km, km.keymap_items.new(MoveObjectToCursor.bl_idname, 'W', 'PRESS', alt=True)))
 
 
 def unregister():
-    print("arm unregister()")
     bpy.utils.unregister_class(ArmControlPanel)
+    bpy.utils.unregister_class(SetJointValue)
+    bpy.utils.unregister_class(InitAllJointsValue)
+    bpy.utils.unregister_class(DHDrawer)
+    bpy.utils.unregister_class(RunScript)
 
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
