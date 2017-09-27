@@ -7,11 +7,13 @@ bl_info = {
 import math, sys, importlib
 import bpy
 from mathutils import Vector
-from bpy.props import FloatProperty
+from bpy.props import FloatProperty, FloatVectorProperty
 from .common import output
+from . import DH_helper
 import addon_utils
-from .DH_helper import DHDrawer
 
+
+developing = True
 
 class ArmControlPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
@@ -35,17 +37,29 @@ class ArmControlPanel(bpy.types.Panel):
         drawJointAngleUI(scene, layout, 5)
         drawJointAngleUI(scene, layout, 6)
 
-        #layout.separator()
-        #layout.row().operator(RunScript.bl_idname, text="绘制 D-H 辅助线")
+        layout.separator()
+        row = layout.row()
+        op = row.operator(ShowOrHideArm.bl_idname, text="显示机械臂")
+        op.show = True
+        op = row.operator(ShowOrHideArm.bl_idname, text="隐藏机械臂")
+        op.show = False
+
+        layout.separator()
+        layout.row().operator(DrawGuide.bl_idname, text="重绘 D-H 辅助线")
+        layout.row().operator(ClearGuide.bl_idname, text="清除 D-H 辅助线")
 
         layout.separator()
         layout.row().operator(RunScript.bl_idname, text="执行脚本")
+        layout.separator()
+        layout.row().operator(TestButton1.bl_idname, text="测试1")
+        layout.row().operator(TestButton2.bl_idname, text="测试2")
+        layout.row().operator(TestButton3.bl_idname, text="测试3")
 
 
 def drawJointAngleUI(obj, layout, index) :
     layout.separator()
     row = layout.row()
-    row.prop(obj, "joint"+str(index)+"_value", text="关节"+str(index)+"角度")
+    row.prop(obj, "joint"+str(index)+"_value", text="关节"+str(index)+"角度值(θ)")
 
     row = layout.row()
     op = row.operator("view3d.set_joint_value", text="最小")
@@ -58,10 +72,21 @@ def drawJointAngleUI(obj, layout, index) :
     op.request_position = "max"
     op.joint_index = index
 
+    row = layout.row()
+    v = row.prop(obj, "joint"+str(index)+"_DH", text="a,α,d,θ")
+
+
+
 def createJointValueUpdate(jointIdx)  :
     def update(self, context) :
         context.scene.objects["link"+str(jointIdx)].rotation_euler[meta_joints[jointIdx]["axle"]] = math.radians( context.scene["joint"+str(jointIdx)+"_value"] )
-        print("jointValueUpdate:", jointIdx, context.scene["joint"+str(jointIdx)+"_value"])
+
+        # 更新 D-H 辅助线
+        loadHelper().redrawGuide()
+
+        # 更新 Theta 值
+        jointHDParam = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
+        jointHDParam[3] = context.scene["joint"+str(jointIdx)+"_value"]
 
     return update
 
@@ -90,6 +115,13 @@ class SetJointValue(bpy.types.Operator):
         context.scene.objects[linkName].rotation_euler[axle] = math.radians(value)
         context.scene[joint_name] = value
 
+        # 更新 D-H 辅助线
+        loadHelper().redrawGuide()
+
+        # 更新 Theta 值
+        jointHDParam = getattr(bpy.context.scene, "joint" + str(self.joint_index) + "_DH")
+        jointHDParam[3] = context.scene["joint"+str(self.joint_index)+"_value"]
+
         return {"FINISHED"}
 
 
@@ -105,25 +137,97 @@ class InitAllJointsValue(bpy.types.Operator):
             context.scene[joint_name] = 0
             meta_joints[idx]['update'](self, context)
 
+            # 更新 Theta 值
+            jointHDParam = getattr(bpy.context.scene, "joint" + str(idx) + "_DH")
+            jointHDParam[3] = context.scene["joint"+str(idx)+"_value"]
+
+        # 更新 D-H 辅助线
+        loadHelper().redrawGuide()
+
+        return {"FINISHED"}
+
+
+class ShowOrHideArm(bpy.types.Operator):
+    bl_idname = "view3d.show_or_hide_arm"
+    bl_label = "xxxxx"
+    bl_options = {'REGISTER', 'UNDO'}
+    show = bpy.props.BoolProperty(default=False)
+
+    def execute(self, context):
+        for i in list(range(5)) + list(range(10,15)) :
+            context.scene.layers[i] = self.show
+        return {"FINISHED"}
+
+
+class DrawGuide(bpy.types.Operator):
+    bl_idname = "view3d.robotarm_drawguide"
+    bl_label = "xxxxx"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        loadHelper().redrawGuide()
+        return {"FINISHED"}
+
+class ClearGuide(bpy.types.Operator):
+    bl_idname = "view3d.robotarm_clearguide"
+    bl_label = "重绘HD辅助线"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        loadHelper().clearGuide()
         return {"FINISHED"}
 
 
 scriptcache = {}
+def loadHelper() :
+    modulename = "DH_helper"
+    if modulename in scriptcache:
+        importlib.reload(scriptcache[modulename])
+    else:
+        from . import DH_helper
+        scriptcache[modulename] = DH_helper
+    return scriptcache[modulename]
+
 class RunScript(bpy.types.Operator):
     bl_idname = "view3d.run_my_script"
     bl_label = "run my script"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
+        loadHelper()
+        return {"FINISHED"}
 
-        modulename = "DH_helper"
 
-        print(sys.modules.get("robot-arm-simulation.DH_helper"))
-        if modulename in scriptcache :
-            importlib.reload(scriptcache[modulename])
-        else:
-            from . import script
-            scriptcache[modulename] = script
+
+class TestButton1(bpy.types.Operator):
+    bl_idname = "view3d.test_btn_1"
+    bl_label = "run my test function"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        output(dir(scriptcache["DH_helper"]))
+        scriptcache["DH_helper"].clearAllLines()
+
+        return {"FINISHED"}
+
+class TestButton2(bpy.types.Operator):
+    bl_idname = "view3d.test_btn_2"
+    bl_label = "run my test function"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        output(dir(scriptcache["DH_helper"]))
+        output( scriptcache["DH_helper"].gpColor(context) )
+
+        return {"FINISHED"}
+
+class TestButton3(bpy.types.Operator):
+    bl_idname = "view3d.test_btn_3"
+    bl_label = "run my test function"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
         return {"FINISHED"}
 
 
@@ -171,11 +275,24 @@ def register():
     bpy.types.Scene.joint5_value = FloatProperty(update=meta_joints[5]["update"])
     bpy.types.Scene.joint6_value = FloatProperty(update=meta_joints[6]["update"])
 
+    bpy.types.Scene.joint1_DH = FloatVectorProperty(size=4)
+    bpy.types.Scene.joint2_DH = FloatVectorProperty(size=4)
+    bpy.types.Scene.joint3_DH = FloatVectorProperty(size=4)
+    bpy.types.Scene.joint4_DH = FloatVectorProperty(size=4)
+    bpy.types.Scene.joint5_DH = FloatVectorProperty(size=4)
+    bpy.types.Scene.joint6_DH = FloatVectorProperty(size=4)
+
     bpy.utils.register_class(ArmControlPanel)
     bpy.utils.register_class(SetJointValue)
     bpy.utils.register_class(InitAllJointsValue)
-    bpy.utils.register_class(DHDrawer)
+    bpy.utils.register_class(DrawGuide)
+    bpy.utils.register_class(ClearGuide)
+    bpy.utils.register_class(ShowOrHideArm)
     bpy.utils.register_class(RunScript)
+    bpy.utils.register_class(TestButton1)
+    bpy.utils.register_class(TestButton2)
+    bpy.utils.register_class(TestButton3)
+
 
     # handle the keymap
     wm = bpy.context.window_manager
@@ -190,8 +307,13 @@ def unregister():
     bpy.utils.unregister_class(ArmControlPanel)
     bpy.utils.unregister_class(SetJointValue)
     bpy.utils.unregister_class(InitAllJointsValue)
-    bpy.utils.unregister_class(DHDrawer)
+    bpy.utils.unregister_class(DrawGuide)
+    bpy.utils.unregister_class(ClearGuide)
+    bpy.utils.unregister_class(ShowOrHideArm)
     bpy.utils.unregister_class(RunScript)
+    bpy.utils.unregister_class(TestButton1)
+    bpy.utils.unregister_class(TestButton2)
+    bpy.utils.unregister_class(TestButton3)
 
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
