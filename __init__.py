@@ -7,7 +7,7 @@ bl_info = {
 import math, sys, importlib
 import bpy
 from mathutils import Vector
-from bpy.props import FloatProperty, FloatVectorProperty
+from bpy.props import FloatProperty, FloatVectorProperty, BoolProperty, IntProperty, StringProperty
 from .common import output
 from . import DH_helper
 import addon_utils
@@ -59,7 +59,7 @@ class ArmControlPanel(bpy.types.Panel):
 def drawJointAngleUI(obj, layout, index) :
     layout.separator()
     row = layout.row()
-    row.prop(obj, "joint"+str(index)+"_value", text="关节"+str(index)+"角度值(θ)")
+    row.prop(obj, "joint"+str(index)+"_value", text="关节"+str(index)+"角度值")
 
     row = layout.row()
     op = row.operator("view3d.set_joint_value", text="最小")
@@ -71,6 +71,8 @@ def drawJointAngleUI(obj, layout, index) :
     op = row.operator("view3d.set_joint_value", text="最大")
     op.request_position = "max"
     op.joint_index = index
+
+    op = row.prop(obj, "joint"+str(index)+"_drawDHGuide", text="辅助线")
 
     row = layout.row()
     v = row.prop(obj, "joint"+str(index)+"_DH", text="a,α,d,θ")
@@ -86,7 +88,6 @@ def createJointValueUpdate(jointIdx)  :
 
         # 更新 Theta 值
         jointHDParam = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
-        jointHDParam[3] = context.scene["joint"+str(jointIdx)+"_value"]
 
     return update
 
@@ -96,8 +97,8 @@ class SetJointValue(bpy.types.Operator):
     bl_label = "Set Joint value"
     bl_options = {'REGISTER', 'UNDO'}
 
-    joint_index = bpy.props.IntProperty()
-    request_position = bpy.props.StringProperty(default='middle')
+    joint_index = IntProperty()
+    request_position = StringProperty(default='middle')
 
     def execute(self, context):
 
@@ -120,7 +121,6 @@ class SetJointValue(bpy.types.Operator):
 
         # 更新 Theta 值
         jointHDParam = getattr(bpy.context.scene, "joint" + str(self.joint_index) + "_DH")
-        jointHDParam[3] = context.scene["joint"+str(self.joint_index)+"_value"]
 
         return {"FINISHED"}
 
@@ -139,7 +139,6 @@ class InitAllJointsValue(bpy.types.Operator):
 
             # 更新 Theta 值
             jointHDParam = getattr(bpy.context.scene, "joint" + str(idx) + "_DH")
-            jointHDParam[3] = context.scene["joint"+str(idx)+"_value"]
 
         # 更新 D-H 辅助线
         loadHelper().redrawGuide()
@@ -151,7 +150,7 @@ class ShowOrHideArm(bpy.types.Operator):
     bl_idname = "view3d.show_or_hide_arm"
     bl_label = "xxxxx"
     bl_options = {'REGISTER', 'UNDO'}
-    show = bpy.props.BoolProperty(default=False)
+    show = BoolProperty(default=False)
 
     def execute(self, context):
         for i in list(range(5)) + list(range(10,15)) :
@@ -281,6 +280,13 @@ def register():
     bpy.types.Scene.joint4_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint5_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint6_DH = FloatVectorProperty(size=4)
+
+    bpy.types.Scene.joint1_drawDHGuide = BoolProperty(default=True)
+    bpy.types.Scene.joint2_drawDHGuide = BoolProperty(default=True)
+    bpy.types.Scene.joint3_drawDHGuide = BoolProperty(default=True)
+    bpy.types.Scene.joint4_drawDHGuide = BoolProperty(default=True)
+    bpy.types.Scene.joint5_drawDHGuide = BoolProperty(default=True)
+    bpy.types.Scene.joint6_drawDHGuide = BoolProperty(default=True)
 
     bpy.utils.register_class(ArmControlPanel)
     bpy.utils.register_class(SetJointValue)
