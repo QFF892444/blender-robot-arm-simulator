@@ -8,7 +8,7 @@ import math, sys, importlib
 import bpy
 from mathutils import Vector
 from bpy.props import FloatProperty, FloatVectorProperty, BoolProperty, IntProperty, StringProperty
-from .common import output
+from .common import output, auto_register, auto_unregister
 from . import DH_helper
 import addon_utils
 
@@ -30,12 +30,23 @@ class ArmControlPanel(bpy.types.Panel):
 
         layout.row().operator("view3d.init_all_joints_value", text="初始位置")
 
-        drawJointAngleUI(scene, layout, 1)
-        drawJointAngleUI(scene, layout, 2)
-        drawJointAngleUI(scene, layout, 3)
-        drawJointAngleUI(scene, layout, 4)
-        drawJointAngleUI(scene, layout, 5)
-        drawJointAngleUI(scene, layout, 6)
+        for i in range(1,7) :
+            drawJointAngleUI(scene, layout, i)
+
+        row = layout.row()
+        row.label(" ")
+        row.label("a")
+        row.label("α")
+        row.label("d")
+        row.label("θ")
+        for i in range(1,7) :
+            row = layout.row()
+            row.prop(scene, "joint"+str(i)+"_drawDHGuide", text=str(i-1)+"-"+str(i)+" 辅助线")
+            row.prop(scene, "joint" + str(i) + "_DH", text="")
+
+        # op = row.prop(obj, "joint" + str(index) + "_drawDHGuide", text="辅助线")
+        # row = layout.row()
+        # v = row.prop(obj, "joint" + str(index) + "_DH", text="a,α,d,θ")
 
         layout.separator()
         row = layout.row()
@@ -47,6 +58,12 @@ class ArmControlPanel(bpy.types.Panel):
         layout.separator()
         layout.row().operator(DrawGuide.bl_idname, text="重绘 D-H 辅助线")
         layout.row().operator(ClearGuide.bl_idname, text="清除 D-H 辅助线")
+
+
+        layout.separator()
+        row = layout.row()
+        row.operator(OuputDHEquation.bl_idname, text=">>>D-H变换矩阵")
+        row.operator(OuputTargetNOA.bl_idname, text=">>>目标noa")
 
         layout.separator()
         layout.row().operator(RunScript.bl_idname, text="执行脚本")
@@ -72,12 +89,6 @@ def drawJointAngleUI(obj, layout, index) :
     op.request_position = "max"
     op.joint_index = index
 
-    op = row.prop(obj, "joint"+str(index)+"_drawDHGuide", text="辅助线")
-
-    row = layout.row()
-    v = row.prop(obj, "joint"+str(index)+"_DH", text="a,α,d,θ")
-
-
 
 def createJointValueUpdate(jointIdx)  :
     def update(self, context) :
@@ -87,7 +98,7 @@ def createJointValueUpdate(jointIdx)  :
         loadHelper().redrawGuide()
 
         # 更新 Theta 值
-        jointHDParam = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
+        jointDHParam = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
 
     return update
 
@@ -120,7 +131,7 @@ class SetJointValue(bpy.types.Operator):
         loadHelper().redrawGuide()
 
         # 更新 Theta 值
-        jointHDParam = getattr(bpy.context.scene, "joint" + str(self.joint_index) + "_DH")
+        jointDHParam = getattr(bpy.context.scene, "joint" + str(self.joint_index) + "_DH")
 
         return {"FINISHED"}
 
@@ -138,7 +149,7 @@ class InitAllJointsValue(bpy.types.Operator):
             meta_joints[idx]['update'](self, context)
 
             # 更新 Theta 值
-            jointHDParam = getattr(bpy.context.scene, "joint" + str(idx) + "_DH")
+            jointDHParam = getattr(bpy.context.scene, "joint" + str(idx) + "_DH")
 
         # 更新 D-H 辅助线
         loadHelper().redrawGuide()
@@ -169,13 +180,34 @@ class DrawGuide(bpy.types.Operator):
 
 class ClearGuide(bpy.types.Operator):
     bl_idname = "view3d.robotarm_clearguide"
-    bl_label = "重绘HD辅助线"
+    bl_label = "重绘DH辅助线"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         loadHelper().clearGuide()
         return {"FINISHED"}
 
+
+class OuputDHEquation(bpy.types.Operator):
+    bl_idname = "view3d.output_dh_equation"
+    bl_label = "化减并输出DH方程式"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        loadHelper().outputDHEquation()
+        return {"FINISHED"}
+
+class OuputTargetNOA(bpy.types.Operator):
+    bl_idname = "view3d.output_target_noa"
+    bl_label = "output_target_noa"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        if "target" in context.scene.objects :
+            output( loadHelper().formatMatrix( context.scene.objects["target"].matrix_world ) )
+        else :
+            output("missing object named 'target'")
+        return {"FINISHED"}
 
 scriptcache = {}
 def loadHelper() :
@@ -266,7 +298,18 @@ meta_joints = {
 
 addon_keymaps = []
 
+classes = [
+    ArmControlPanel ,
+    SetJointValue ,
+    InitAllJointsValue ,
+    OuputTargetNOA ,
+    OuputTargetNOA ,
+    OuputTargetNOA ,
+    OuputTargetNOA ,
+]
+
 def register():
+
     bpy.types.Scene.joint1_value = FloatProperty(update=meta_joints[1]["update"])
     bpy.types.Scene.joint2_value = FloatProperty(update=meta_joints[2]["update"])
     bpy.types.Scene.joint3_value = FloatProperty(update=meta_joints[3]["update"])
@@ -281,6 +324,11 @@ def register():
     bpy.types.Scene.joint5_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint6_DH = FloatVectorProperty(size=4)
 
+    # bpy.types.Scene.DH_a = FloatVectorProperty(size=6)
+    # bpy.types.Scene.DH_alpha = FloatVectorProperty(size=6)
+    # bpy.types.Scene.DH_d = FloatVectorProperty(size=6)
+    # bpy.types.Scene.DH_theta = FloatVectorProperty(size=6)
+
     bpy.types.Scene.joint1_drawDHGuide = BoolProperty(default=True)
     bpy.types.Scene.joint2_drawDHGuide = BoolProperty(default=True)
     bpy.types.Scene.joint3_drawDHGuide = BoolProperty(default=True)
@@ -288,16 +336,8 @@ def register():
     bpy.types.Scene.joint5_drawDHGuide = BoolProperty(default=True)
     bpy.types.Scene.joint6_drawDHGuide = BoolProperty(default=True)
 
-    bpy.utils.register_class(ArmControlPanel)
-    bpy.utils.register_class(SetJointValue)
-    bpy.utils.register_class(InitAllJointsValue)
-    bpy.utils.register_class(DrawGuide)
-    bpy.utils.register_class(ClearGuide)
-    bpy.utils.register_class(ShowOrHideArm)
-    bpy.utils.register_class(RunScript)
-    bpy.utils.register_class(TestButton1)
-    bpy.utils.register_class(TestButton2)
-    bpy.utils.register_class(TestButton3)
+    # 自动注册所有类
+    auto_register(TestButton2.__module__)
 
 
     # handle the keymap
@@ -310,16 +350,9 @@ def register():
 
 
 def unregister():
-    bpy.utils.unregister_class(ArmControlPanel)
-    bpy.utils.unregister_class(SetJointValue)
-    bpy.utils.unregister_class(InitAllJointsValue)
-    bpy.utils.unregister_class(DrawGuide)
-    bpy.utils.unregister_class(ClearGuide)
-    bpy.utils.unregister_class(ShowOrHideArm)
-    bpy.utils.unregister_class(RunScript)
-    bpy.utils.unregister_class(TestButton1)
-    bpy.utils.unregister_class(TestButton2)
-    bpy.utils.unregister_class(TestButton3)
+
+    # 自动注销所有类
+    auto_unregister(TestButton2.__module__)
 
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)
