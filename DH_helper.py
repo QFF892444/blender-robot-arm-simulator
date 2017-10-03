@@ -106,90 +106,6 @@ joints_cosys = {
 }
 
 
-
-def zAxesLine(jointNumber) :
-    link1 = bpy.context.scene.objects["link"+str(jointNumber)]
-    return ( link1.matrix_world * Vector((0, 0, 0)), link1.matrix_world * Vector((0,0,50)) )
-
-def calculateJointCoordinateSystem(jointN) :
-
-    # 关节n 和 n-1 的坐标系
-    cosysN = joints_cosys[jointN]
-
-    # 关节 n 和 n-1 的 z轴线段
-    zn = zAxesLine(jointN)
-    zpre = zAxesLine(jointN-1)
-
-    # 线段的射线表示法：
-    # r(t) = p  + td
-    # t = 0~1
-    # 算法参考 《3D数学基础》P268
-    # r1(t1) 为 zn上的垂足
-    # r2(t2) 为 zpre 上的垂足
-    p1 = zn[0]
-    d1 = zn[1] - zn[0]
-    p2 = zpre[0]
-    d2 = zpre[1] - zpre[0]
-
-    v = d1.cross(d2)
-
-    # d1xd2 的长度为0(受float精度的影响接近0),表示前后两个关节的 z轴平行 或 重叠
-    if v.magnitude<0.001 :
-
-        cosysN["O"] = zn[0]
-        cosysN["z-unit"] = 50 * normalize(zn[1]-zn[0]) + zn[0]
-
-        # 将 关节n的原点 到 关节n-1 z轴上的垂线 做为关节n 的x轴
-        cosysN["H"] = projection(zn[0]-zpre[0], zpre[1]-zpre[0]) + zpre[0]
-        cosysN["x-unit"] = 50 * normalize(zn[0] - cosysN["H"]) + zn[0]
-
-
-    else :
-        magnitude2 = v.magnitude * v.magnitude
-
-        tn = (p2-p1).cross(d2).dot(v) / magnitude2
-        tpre = (p2-p1).cross(d1).dot(v) / magnitude2
-
-        # 带入射线函数，求出 r1 和 r2
-        r1 = p1+ tn * d1
-        r2 = p2+ tpre * d2
-
-        # D-H 参数中的 a
-        line_a = r1-r2
-
-        cosysN["O"] = r1
-        cosysN["z-unit"] = 50 * normalize(zn[1]-r1) + r1
-
-        if line_a.magnitude<0.001 : # r1, r2 为同一个点，则两个 z轴相交
-            # 用两轴的叉乘向量做为关节n的 x轴方向
-            cosysN["x-unit"] = 50 * normalize( (zn[1]-zn[0]).cross( zpre[1]-zpre[0] ) ) + r1
-        else:
-            cosysN["x-unit"] = 50 * normalize(line_a) + r1
-
-        cosysN["H"] = r2
-
-
-
-    # # 计算 D-H 参数里的 a, alpha 和 d
-    jointDHParam = getattr(bpy.context.scene, "joint"+str(jointN)+"_DH")
-
-    # 参数a
-    jointDHParam[0] = (cosysN["O"]-cosysN["H"]).magnitude
-
-    # 参数alpha
-    vzn = zn[1] - zn[0]
-    vzpre = zpre[1] - zpre[0]
-    acos_value = vzn.dot(vzpre)/(vzn.magnitude*vzpre.magnitude)
-    if acos_value>1 :   # 由于精度问题， 容易出现 1.0000000000000003 这样的数值
-        acos_value = 1.0
-    jointDHParam[1] = math.acos( acos_value ) * 180.0/math.pi
-
-    # 1-5关节的参数d
-    if jointN<6 :
-        cosysNext = joints_cosys[jointN+1]
-        jointDHParam[2] = (cosysNext["H"]-cosysN["H"]).magnitude
-
-
 def normalize(v):
     v.normalize()
     return v
@@ -244,19 +160,18 @@ def projection(v, n):
 # 线段的射线表示法：
 # r(t) = p  + td
 # t = 0~1
-def zAxes(cosysN):
-    if isinstance(cosysN,str) :
-        link = bpy.context.scene.objects[cosysN]
+def zAxes(jointN):
+    if isinstance(jointN,str) :
+        link = bpy.context.scene.objects[jointN]
     # 坐标系n 对应 关节n+1
     else:
-        jointN = cosysN + 1
         link = bpy.context.scene.objects["link" + str(jointN)]
     p = link.matrix_world * Vector((0, 0, 0))
     d = link.matrix_world * Vector((0, 0, 50)) - p
     return (p, d)
 
 # 测定 DH参数模型中的常量值： a, alpha, d
-def measureCoordinateSystem(cosysIdx):
+def measureCoordinateSystem2(cosysIdx):
 
     # 坐标系n 对应 关节n+1
     cosysN = joints_cosys[cosysIdx]
@@ -299,6 +214,46 @@ def measureCoordinateSystem(cosysIdx):
     cosysN["z-unit"] = 50 * normalize(dN) + cosysN["O"]
 
 
+# 测定 固连到各个关节的相对坐标系
+def measureCoordinateSystem(jointIdx):
+
+    # 坐标系n 对应 关节n+1
+    cosysN = joints_cosys[jointIdx]
+
+    # 关节n 和 关节n+1 的z轴射线表达式参数
+    (pN, dN) = zAxes(jointIdx)
+    (pNext, dNext) = zAxes(jointIdx+1)
+
+    # 计算前后z轴的公垂线
+    (hN, hNext, hDirection) = commonPerpendicular(pN,dN, pNext, dNext)
+
+    # 没有共垂线，两轴平行或重叠
+    if hN==None and hNext==None :
+
+        # n关节的坐标，可以时 n+1 z轴上的任意位置
+        cosysN["O"] = pN
+
+        dNP = pNext - pN
+
+        # 两z轴共线（重叠）
+        if abs(dNP.dot(dN)-dNP.magnitude * dN.magnitude) < 0.001:
+            cosysN["H"] = cosysN["O"]
+            cosysN["x-unit"] = Vector((50,0,0)) + cosysN["O"]  # 取世界坐标系的x轴方向
+        # 两z轴平行
+        else :
+            cosysN["H"] = projection(pN-pNext, dNext) + pNext
+            cosysN["x-unit"] = 50 * normalize(cosysN["O"]-cosysN["H"]) + cosysN["O"]
+
+    # 存在公垂线
+    else :
+        # 按照DH模型的约定，关节n 的原点，在关节n+1的 z轴上
+        cosysN["O"] = hN
+        cosysN["H"] = hNext
+        cosysN["x-unit"] = -50 * normalize(hDirection) + cosysN["O"]
+
+    # z轴
+    cosysN["z-unit"] = 50 * normalize(dN) + cosysN["O"]
+
 def measureDHConstValue(jointIdx):
 
     ## 计算 D-H 参数里的 a, alpha 和 d
@@ -306,12 +261,17 @@ def measureDHConstValue(jointIdx):
     cosysN = joints_cosys[jointIdx]
     cosysPre = joints_cosys[jointIdx - 1]
 
-    output(jointIdx,cosysN["O"],cosysN["H"])
+    # 按习惯 a6=0, α6 = 0
+    if (jointIdx+1) in joints_cosys :
+        cosysNext = joints_cosys[jointIdx+1]
+        jointDHParam[0] = (cosysN["O"] - cosysN["H"]).magnitude # 参数 a
+        jointDHParam[1] = linesAngle(cosysNext["z-unit"]-cosysNext["O"], cosysN["z-unit"]-cosysN["O"])
+        #                                                        # 参数alpha
+    else :
+        jointDHParam[0] = 0
+        jointDHParam[1] = 0
 
-    jointDHParam[0] = (cosysN["O"]-cosysN["H"]).magnitude       # 参数 a
-    jointDHParam[1] = linesAngle(cosysPre["z-unit"]-cosysPre["O"], cosysN["z-unit"]-cosysN["O"])
-                                                                # 参数alpha
-    jointDHParam[2] = (cosysN["H"]-cosysPre["O"]).magnitude     # 参数d
+    jointDHParam[2] = (cosysN["O"]-cosysPre["H"]).magnitude     # 参数d
     jointDHParam[3] = linesAngle(cosysPre["x-unit"]-cosysPre["O"], cosysN["x-unit"]-cosysN["O"])
     #                                                           # 参数theta
 
@@ -327,10 +287,7 @@ def drawJointDHGuide(jointIdx):
     if joints_cosys[jointIdx]["H"] != None :
         line(joints_cosys[jointIdx]["O"], joints_cosys[jointIdx]["H"], "DH-a")
     # line d
-    if jointIdx<6 :
-        line(joints_cosys[jointIdx]["H"], joints_cosys[jointIdx-1]["O"], "DH-d")
-    else :
-        line(joints_cosys[jointIdx]["O"], bpy.context.scene.objects["arm-end"].location, "DH-d")
+    line(joints_cosys[jointIdx]["O"], joints_cosys[jointIdx-1]["H"], "DH-d")
 
 
 
@@ -347,11 +304,8 @@ def redrawGuide():
     # 标定关节 1-6 的DH参数
     for idx in range(1,7) :
         measureDHConstValue(idx)
-
-    for idx in range(5,-1,-1) :
-        if getattr(bpy.context.scene, "joint"+str(idx+1)+"_drawDHGuide") == True :
+        if getattr(bpy.context.scene, "joint"+str(idx)+"_drawDHGuide") == True :
             drawJointDHGuide(idx)
-    drawJointDHGuide(6) # 末端执行器
 
     # 最后一个关节的参数d 为到末端的距离
     # getattr(bpy.context.scene, "joint6_DH")[2] = (bpy.context.scene.objects["arm-end"].location - joints_cosys[6]["O"]).magnitude
@@ -361,19 +315,21 @@ def formatMatrix(m) :
     for row in range(0, len(m)):
         txt += "    ["
         for clm in range(0, len(m[row])):
-            txt += str(m[row][clm]) + ", "
+            try:
+                if abs(float(m[row][clm]))<0.001 :
+                    txt += "0, "
+                elif abs(1-float(m[row][clm]))<0.001 :
+                    txt += "1, "
+                else :
+                    txt += str(m[row][clm]) + ", "
+            except :
+                txt += str(m[row][clm]) + ", "
         txt += "], \n"
     txt += "])"
     return txt
 
 def outputDHEquation():
 
-#     matrxitpl = """Matrix([
-#     [cos(θ), -sin(θ)*cos(α), sin(θ)*sin(α), a1*cos(θ)],
-#     [sin(θ), cos(θ)*cos(α), -cos(θ)*sin(α), a1*sin(θ)],
-#     [0, sin(α), cos(α), d],
-#     [0, 0, 0, 1],
-# ])"""
     codetpl = """
 from sympy import *
 
@@ -384,44 +340,7 @@ from sympy import *
 θ5 = Symbol("θ5")
 θ6 = Symbol("θ6")
 
-simplify
-( Matrix([
-    [cos(θ1), -sin(θ1)*cos(α1), sin(θ1)*sin(α1), a1*cos(θ1)],
-    [sin(θ1), cos(θ1)*cos(α1), -cos(θ1)*sin(α1), a1*sin(θ1)],
-    [0, sin(α1), cos(α1), d1],
-    [0, 0, 0, 1],
-]) * Matrix([
-    [cos(θ2), -sin(θ2)*cos(α2), sin(θ2)*sin(α2), a2*cos(θ2)],
-    [sin(θ2), cos(θ2)*cos(α2), -cos(θ2)*sin(α2), a2*sin(θ2)],
-    [0, sin(α2), cos(α2), d2],
-    [0, 0, 0, 1],
-]) * Matrix([
-    [cos(θ3), -sin(θ3)*cos(α3), sin(θ3)*sin(α3), a3*cos(θ3)],
-    [sin(θ3), cos(θ3)*cos(α3), -cos(θ3)*sin(α3), a3*sin(θ3)],
-    [0, sin(α3), cos(α3), d3],
-    [0, 0, 0, 1],
-]) * Matrix([
-    [cos(θ4), -sin(θ4)*cos(α4), sin(θ4)*sin(α4), a4*cos(θ4)],
-    [sin(θ4), cos(θ4)*cos(α4), -cos(θ4)*sin(α4), a4*sin(θ4)],
-    [0, sin(α4), cos(α4), d4],
-    [0, 0, 0, 1],
-]) * Matrix([
-    [cos(θ5), -sin(θ5)*cos(α5), sin(θ5)*sin(α5), a5*cos(θ5)],
-    [sin(θ5), cos(θ5)*cos(α5), -cos(θ5)*sin(α5), a5*sin(θ5)],
-    [0, sin(α5), cos(α5), d5],
-    [0, 0, 0, 1],
-]) * Matrix([
-    [cos(θ6), -sin(θ6)*cos(α6), sin(θ6)*sin(α6), a6*cos(θ6)],
-    [sin(θ6), cos(θ6)*cos(α6), -cos(θ6)*sin(α6), a6*sin(θ6)],
-    [0, sin(α6), cos(α6), d6],
-    [0, 0, 0, 1],
-]))
-    """
-
-
-# [cos(θ1), -sin(θ1) * cos(α1), sin(θ1) * sin(α1), a1 * cos(θ1)],
-# [sin(θ1), cos(θ1) * cos(α1), -cos(θ1) * sin(α1), a1 * sin(θ1)],
-# [0, sin(α1), cos(α1), d1],
+simplify( """
     exp = [
         [ "cos(θ)", "-sin(θ) * cos(α)", "sin(θ) * sin(α)", "a * cos(θ)"] ,
         [ "sin(θ)", "cos(θ) * cos(α)", "-cos(θ) * sin(α)", "a * sin(θ)"] ,
@@ -463,9 +382,12 @@ simplify
             for clm in range(len(exp[row])) :
                 m[row][clm] = simplify( exp[row][clm], jointDHParam )
 
-        output(joint, formatMatrix(m))
+        if joint>1 :
+            codetpl+= " * "
+        codetpl+= formatMatrix(m)
 
-
+    codetpl+=" ) \n"
+    output(codetpl)
 
     #
     # for idx in range(1,7) :
@@ -475,3 +397,13 @@ simplify
     #     codetpl = codetpl.replace("d"+str(idx), str(jointDHParam[2]))
     #
     # output(codetpl)
+
+
+def outputDHConst():
+    txt = ""
+    for i in range(1,7) :
+        jointDHParam = getattr(bpy.context.scene, "joint" + str(i) + "_DH")
+        txt+= "a"+str(i) + "=" + str(jointDHParam[0]) + "\n"
+        txt+= "α"+str(i) + "=" + str(jointDHParam[1]) + "\n"
+        txt+= "d"+str(i) + "=" + str(jointDHParam[2]) + "\n"
+    output(txt)

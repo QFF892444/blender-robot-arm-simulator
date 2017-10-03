@@ -62,7 +62,8 @@ class ArmControlPanel(bpy.types.Panel):
 
         layout.separator()
         row = layout.row()
-        row.operator(OuputDHEquation.bl_idname, text=">>>D-H变换矩阵")
+        row.operator(OuputDHConst.bl_idname, text=">>>DH常量")
+        row.operator(OuputDHEquation.bl_idname, text=">>>DH变换矩阵")
         row.operator(OuputTargetNOA.bl_idname, text=">>>目标noa")
 
         layout.separator()
@@ -101,6 +102,8 @@ def createJointValueUpdate(jointIdx)  :
         jointDHParam = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
 
     return update
+
+
 
 
 class SetJointValue(bpy.types.Operator):
@@ -188,6 +191,14 @@ class ClearGuide(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class OuputDHConst(bpy.types.Operator):
+    bl_idname = "view3d.output_dh_const"
+    bl_label = "输出DH常量"
+    bl_options = {'REGISTER', 'UNDO'}
+    def execute(self, context):
+        loadHelper().outputDHConst()
+        return {"FINISHED"}
+
 class OuputDHEquation(bpy.types.Operator):
     bl_idname = "view3d.output_dh_equation"
     bl_label = "化减并输出DH方程式"
@@ -266,32 +277,32 @@ meta_joints = {
     1: {
         "max": 135,
         "axle": 2,
-        "update": createJointValueUpdate(1)
+        "update": createJointValueUpdate(1),
     },
     2: {
         "max": 90,
         "axle": 1,
-        "update": createJointValueUpdate(2)
+        "update": createJointValueUpdate(2),
     },
     3: {
         "max": 135,
         "axle": 1,
-        "update": createJointValueUpdate(3)
+        "update": createJointValueUpdate(3),
     },
     4: {
         "max": 90,
         "axle": 2,
-        "update": createJointValueUpdate(4)
+        "update": createJointValueUpdate(4),
     },
     5: {
         "max": 135,
         "axle": 1,
-        "update": createJointValueUpdate(5)
+        "update": createJointValueUpdate(5),
     },
     6: {
         "max": 90,
         "axle": 2,
-        "update": createJointValueUpdate(6)
+        "update": createJointValueUpdate(6),
     },
 
 }
@@ -329,12 +340,14 @@ def register():
     # bpy.types.Scene.DH_d = FloatVectorProperty(size=6)
     # bpy.types.Scene.DH_theta = FloatVectorProperty(size=6)
 
-    bpy.types.Scene.joint1_drawDHGuide = BoolProperty(default=True)
-    bpy.types.Scene.joint2_drawDHGuide = BoolProperty(default=True)
-    bpy.types.Scene.joint3_drawDHGuide = BoolProperty(default=True)
-    bpy.types.Scene.joint4_drawDHGuide = BoolProperty(default=True)
-    bpy.types.Scene.joint5_drawDHGuide = BoolProperty(default=True)
-    bpy.types.Scene.joint6_drawDHGuide = BoolProperty(default=True)
+    def DHGuideUpdate(self, context):
+        loadHelper().redrawGuide()
+    bpy.types.Scene.joint1_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
+    bpy.types.Scene.joint2_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
+    bpy.types.Scene.joint3_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
+    bpy.types.Scene.joint4_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
+    bpy.types.Scene.joint5_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
+    bpy.types.Scene.joint6_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
 
     # 自动注册所有类
     auto_register(TestButton2.__module__)
