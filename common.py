@@ -1,4 +1,6 @@
-import bpy, importlib
+import bpy, sys, importlib
+
+developing = False
 
 def console_get():
     for area in bpy.context.screen.areas:
@@ -47,3 +49,12 @@ def auto_unregister(moduleName) :
         if "bl_idname" in dir(sth) and sth.__module__==moduleName :
             bpy.utils.unregister_class(sth)
 
+scriptcache = {}
+def load(name) :
+    modulename = __package__+"."+name
+    if modulename in scriptcache:
+        if developing :
+            importlib.reload(scriptcache[modulename])
+    else:
+        scriptcache[modulename] = importlib.import_module(modulename)
+    return scriptcache[modulename]

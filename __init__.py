@@ -4,16 +4,15 @@ bl_info = {
 }
 
 
-import math, sys, importlib
+import math, importlib
 import bpy
 from mathutils import Vector
 from bpy.props import FloatProperty, FloatVectorProperty, BoolProperty, IntProperty, StringProperty
-from .common import output, auto_register, auto_unregister
-from . import DH_helper
-import addon_utils
 
-
-developing = True
+from . import common
+importlib.reload(common)
+common.developing = True
+from .common import output, auto_register, auto_unregister, load
 
 class ArmControlPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
@@ -44,34 +43,27 @@ class ArmControlPanel(bpy.types.Panel):
             row.prop(scene, "joint"+str(i)+"_drawDHGuide", text=str(i-1)+"-"+str(i)+" 辅助线")
             row.prop(scene, "joint" + str(i) + "_DH", text="")
 
-        # op = row.prop(obj, "joint" + str(index) + "_drawDHGuide", text="辅助线")
-        # row = layout.row()
-        # v = row.prop(obj, "joint" + str(index) + "_DH", text="a,α,d,θ")
-
         layout.separator()
         row = layout.row()
         op = row.operator(ShowOrHideArm.bl_idname, text="显示机械臂")
         op.show = True
         op = row.operator(ShowOrHideArm.bl_idname, text="隐藏机械臂")
         op.show = False
+        func_operator(layout.row(), "重绘 DH辅助线", ("DH_helper","redrawGuide")) \
+            ("清除 DH辅助线", ("DH_helper","clearGuide"))
 
         layout.separator()
-        layout.row().operator(DrawGuide.bl_idname, text="重绘 D-H 辅助线")
-        layout.row().operator(ClearGuide.bl_idname, text="清除 D-H 辅助线")
-
+        func_operator(layout.row(), "正运动学", ("kinematics","forword"), passContext=True)
+        func_operator(layout.row(), ">>>DH常量", ("DH_helper", "outputDHConst")) \
+            (">>>DH变换矩阵", ("DH_helper", "outputDHEquation")) \
+            (">>>目标noa", lambda :
+                output(load("DH_helper").formatMatrix(context.scene.objects["target"].matrix_world)) \
+                          if "target" in context.scene.objects \
+                          else output("missing object named 'target'")
+            )
 
         layout.separator()
-        row = layout.row()
-        row.operator(OuputDHConst.bl_idname, text=">>>DH常量")
-        row.operator(OuputDHEquation.bl_idname, text=">>>DH变换矩阵")
-        row.operator(OuputTargetNOA.bl_idname, text=">>>目标noa")
-
-        layout.separator()
-        layout.row().operator(RunScript.bl_idname, text="执行脚本")
-        layout.separator()
-        layout.row().operator(TestButton1.bl_idname, text="测试1")
-        layout.row().operator(TestButton2.bl_idname, text="测试2")
-        layout.row().operator(TestButton3.bl_idname, text="测试3")
+        func_operator(layout.row(), "执行脚本", lambda : load("DH_helper"))
 
 
 def drawJointAngleUI(obj, layout, index) :
@@ -94,13 +86,8 @@ def drawJointAngleUI(obj, layout, index) :
 def createJointValueUpdate(jointIdx)  :
     def update(self, context) :
         context.scene.objects["link"+str(jointIdx)].rotation_euler[meta_joints[jointIdx]["axle"]] = math.radians( context.scene["joint"+str(jointIdx)+"_value"] )
-
         # 更新 D-H 辅助线
-        loadHelper().redrawGuide()
-
-        # 更新 Theta 值
-        jointDHParam = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
-
+        load("DH_helper").redrawGuide()
     return update
 
 
@@ -131,7 +118,7 @@ class SetJointValue(bpy.types.Operator):
         context.scene[joint_name] = value
 
         # 更新 D-H 辅助线
-        loadHelper().redrawGuide()
+        load("DH_helper").redrawGuide()
 
         # 更新 Theta 值
         jointDHParam = getattr(bpy.context.scene, "joint" + str(self.joint_index) + "_DH")
@@ -155,14 +142,14 @@ class InitAllJointsValue(bpy.types.Operator):
             jointDHParam = getattr(bpy.context.scene, "joint" + str(idx) + "_DH")
 
         # 更新 D-H 辅助线
-        loadHelper().redrawGuide()
+        load("DH_helper").redrawGuide()
 
         return {"FINISHED"}
 
 
 class ShowOrHideArm(bpy.types.Operator):
     bl_idname = "view3d.show_or_hide_arm"
-    bl_label = "xxxxx"
+    bl_label = "Show or Hide Arm"
     bl_options = {'REGISTER', 'UNDO'}
     show = BoolProperty(default=False)
 
@@ -172,105 +159,43 @@ class ShowOrHideArm(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class DrawGuide(bpy.types.Operator):
-    bl_idname = "view3d.robotarm_drawguide"
-    bl_label = "xxxxx"
+operation_funcs = []
+class FunctionOperator(bpy.types.Operator):
+    bl_idname = "view3d.function_operator"
+    bl_label = "some works"
     bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
-        loadHelper().redrawGuide()
-        return {"FINISHED"}
-
-class ClearGuide(bpy.types.Operator):
-    bl_idname = "view3d.robotarm_clearguide"
-    bl_label = "重绘DH辅助线"
-    bl_options = {'REGISTER', 'UNDO'}
+    funcid = IntProperty(-1)
+    passContext = BoolProperty(False)
 
     def execute(self, context):
-        loadHelper().clearGuide()
+        if self.funcid>=0:
+            if self.passContext:
+                operation_funcs[self.funcid](context)
+            else:
+                operation_funcs[self.funcid]()
         return {"FINISHED"}
 
+def func_operator(row, text, func, passContext=False) :
+    def create_func_operator(text, func):
+        if isinstance(func, tuple) :
+            modulename = func[0]
+            funcname = func[1]
+            if passContext :
+                func = lambda context: getattr(load(modulename),funcname)(context)
+            else:
+                func = lambda : getattr(load(modulename),funcname)()
+        op = row.operator(FunctionOperator.bl_idname, text=text)
+        operation_funcs.append(func)
+        op.funcid = len(operation_funcs)-1
+        op.passContext = passContext
 
-class OuputDHConst(bpy.types.Operator):
-    bl_idname = "view3d.output_dh_const"
-    bl_label = "输出DH常量"
-    bl_options = {'REGISTER', 'UNDO'}
-    def execute(self, context):
-        loadHelper().outputDHConst()
-        return {"FINISHED"}
-
-class OuputDHEquation(bpy.types.Operator):
-    bl_idname = "view3d.output_dh_equation"
-    bl_label = "化减并输出DH方程式"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        loadHelper().outputDHEquation()
-        return {"FINISHED"}
-
-class OuputTargetNOA(bpy.types.Operator):
-    bl_idname = "view3d.output_target_noa"
-    bl_label = "output_target_noa"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        if "target" in context.scene.objects :
-            output( loadHelper().formatMatrix( context.scene.objects["target"].matrix_world ) )
-        else :
-            output("missing object named 'target'")
-        return {"FINISHED"}
-
-scriptcache = {}
-def loadHelper() :
-    modulename = "DH_helper"
-    if modulename in scriptcache:
-        importlib.reload(scriptcache[modulename])
-    else:
-        from . import DH_helper
-        scriptcache[modulename] = DH_helper
-    return scriptcache[modulename]
-
-class RunScript(bpy.types.Operator):
-    bl_idname = "view3d.run_my_script"
-    bl_label = "run my script"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        loadHelper()
-        return {"FINISHED"}
+        return create_func_operator
+    return create_func_operator(text, func)
 
 
 
-class TestButton1(bpy.types.Operator):
-    bl_idname = "view3d.test_btn_1"
-    bl_label = "run my test function"
-    bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
-        output(dir(scriptcache["DH_helper"]))
-        scriptcache["DH_helper"].clearAllLines()
-
-        return {"FINISHED"}
-
-class TestButton2(bpy.types.Operator):
-    bl_idname = "view3d.test_btn_2"
-    bl_label = "run my test function"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        output(dir(scriptcache["DH_helper"]))
-        output( scriptcache["DH_helper"].gpColor(context) )
-
-        return {"FINISHED"}
-
-class TestButton3(bpy.types.Operator):
-    bl_idname = "view3d.test_btn_3"
-    bl_label = "run my test function"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-
-        return {"FINISHED"}
 
 
 meta_joints = {
@@ -309,17 +234,9 @@ meta_joints = {
 
 addon_keymaps = []
 
-classes = [
-    ArmControlPanel ,
-    SetJointValue ,
-    InitAllJointsValue ,
-    OuputTargetNOA ,
-    OuputTargetNOA ,
-    OuputTargetNOA ,
-    OuputTargetNOA ,
-]
-
 def register():
+
+    print("register()",__name__)
 
     bpy.types.Scene.joint1_value = FloatProperty(update=meta_joints[1]["update"])
     bpy.types.Scene.joint2_value = FloatProperty(update=meta_joints[2]["update"])
@@ -328,6 +245,7 @@ def register():
     bpy.types.Scene.joint5_value = FloatProperty(update=meta_joints[5]["update"])
     bpy.types.Scene.joint6_value = FloatProperty(update=meta_joints[6]["update"])
 
+    bpy.types.Scene.joint0_DH = FloatVectorProperty(size=4, default=(0,0,0,0)) # alpha0, a0 一般习惯设定为0
     bpy.types.Scene.joint1_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint2_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint3_DH = FloatVectorProperty(size=4)
@@ -341,7 +259,7 @@ def register():
     # bpy.types.Scene.DH_theta = FloatVectorProperty(size=6)
 
     def DHGuideUpdate(self, context):
-        loadHelper().redrawGuide()
+        load("DH_helper").redrawGuide()
     bpy.types.Scene.joint1_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
     bpy.types.Scene.joint2_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
     bpy.types.Scene.joint3_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
@@ -350,8 +268,7 @@ def register():
     bpy.types.Scene.joint6_drawDHGuide = BoolProperty(default=True, update=DHGuideUpdate)
 
     # 自动注册所有类
-    auto_register(TestButton2.__module__)
-
+    auto_register(__name__)
 
     # handle the keymap
     wm = bpy.context.window_manager
@@ -365,7 +282,7 @@ def register():
 def unregister():
 
     # 自动注销所有类
-    auto_unregister(TestButton2.__module__)
+    auto_unregister(__name__)
 
     for km, kmi in addon_keymaps:
         km.keymap_items.remove(kmi)

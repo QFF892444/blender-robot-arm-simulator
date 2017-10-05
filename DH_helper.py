@@ -82,6 +82,7 @@ def line(endpoint1, endpoint2, colorname="default") :
 
     return str
 
+print("file:::::::",__name__)
 
 
 def clearGuide():
@@ -121,7 +122,7 @@ def commonPerpendicular(p1, d1, p2, d2) :
 
     # d1 x d2 的长度为0(受float精度的影响接近0),表示前后两个关节的 z轴平行 或 重叠
     # 该情况下，不存在公垂线
-    if v.magnitude<0.001 :
+    if v.magnitude<0.002 :
         return (None, None, None)
 
     magnitude2 = v.magnitude * v.magnitude
@@ -135,8 +136,8 @@ def commonPerpendicular(p1, d1, p2, d2) :
 
     return (r1, r2, v)
 
-# 计算两直线的夹角
-def linesAngle(d1, d2) :
+# 计算两向量的夹角
+def linesAngle(d1, d2, axes=None) :
 
     acos_value = d1.dot(d2)/(d1.magnitude*d2.magnitude)
     # 由于精度问题， 容易出现 1.0000000000000003 这样的数值
@@ -148,6 +149,13 @@ def linesAngle(d1, d2) :
 
     if degree<0.01 :
         degree = 0
+
+    # 两向量叉乘的结果，和传入的axes方向相同，
+    # 则 d1 到 d2 的为顺时针，返回正值
+    # 否则为逆时针，返回负值
+    if axes!=None :
+        if d1.cross(d2).dot(axes)<0 :
+            degree = -degree
 
     return degree
 
@@ -227,6 +235,7 @@ def measureCoordinateSystem(jointIdx):
     # 计算前后z轴的公垂线
     (hN, hNext, hDirection) = commonPerpendicular(pN,dN, pNext, dNext)
 
+
     # 没有共垂线，两轴平行或重叠
     if hN==None and hNext==None :
 
@@ -238,58 +247,69 @@ def measureCoordinateSystem(jointIdx):
         # 两z轴共线（重叠）
         if abs(dNP.dot(dN)-dNP.magnitude * dN.magnitude) < 0.001:
             cosysN["H"] = cosysN["O"]
-            cosysN["x-unit"] = Vector((50,0,0)) + cosysN["O"]  # 取世界坐标系的x轴方向
+            cosysN["x-unit"] = bpy.context.scene.objects["link" + str(jointIdx)].matrix_world *  Vector((50,0,0))  # 取世界坐标系的x轴方向
         # 两z轴平行
         else :
             cosysN["H"] = projection(pN-pNext, dNext) + pNext
-            cosysN["x-unit"] = 50 * normalize(cosysN["O"]-cosysN["H"]) + cosysN["O"]
+            cosysN["x-unit"] = 50 * normalize(cosysN["H"]-cosysN["O"]) + cosysN["O"]
 
     # 存在公垂线
     else :
         # 按照DH模型的约定，关节n 的原点，在关节n+1的 z轴上
         cosysN["O"] = hN
         cosysN["H"] = hNext
-        cosysN["x-unit"] = -50 * normalize(hDirection) + cosysN["O"]
+        cosysN["x-unit"] = 50 * normalize(hDirection) + cosysN["O"]
 
     # z轴
     cosysN["z-unit"] = 50 * normalize(dN) + cosysN["O"]
 
 def measureDHConstValue(jointIdx):
 
-    ## 计算 D-H 参数里的 a, alpha 和 d
     jointDHParam = getattr(bpy.context.scene, "joint"+str(jointIdx)+"_DH")
     cosysN = joints_cosys[jointIdx]
     cosysPre = joints_cosys[jointIdx - 1]
 
-    # 按习惯 a6=0, α6 = 0
+    # 参数a
+    jointDHParam[0] = (cosysN["O"] - cosysN["H"]).magnitude
+
+    # 参数alpha
     if (jointIdx+1) in joints_cosys :
         cosysNext = joints_cosys[jointIdx+1]
-        jointDHParam[0] = (cosysN["O"] - cosysN["H"]).magnitude # 参数 a
-        jointDHParam[1] = linesAngle(cosysNext["z-unit"]-cosysNext["O"], cosysN["z-unit"]-cosysN["O"])
-        #                                                        # 参数alpha
+        jointDHParam[1] = linesAngle(cosysN["z-unit"]-cosysN["O"], cosysNext["z-unit"]-cosysNext["O"], cosysN["x-unit"]-cosysN["O"])
     else :
-        jointDHParam[0] = 0
+        # 按习惯 α6 = 0
         jointDHParam[1] = 0
 
-    jointDHParam[2] = (cosysN["O"]-cosysPre["H"]).magnitude     # 参数d
-    jointDHParam[3] = linesAngle(cosysPre["x-unit"]-cosysPre["O"], cosysN["x-unit"]-cosysN["O"])
-    #                                                           # 参数theta
+    # 参数d
+    jointDHParam[2] = (cosysN["O"]-cosysPre["H"]).magnitude
+    # 根据和z轴的方向，确定正负
+    if abs(jointDHParam[2])>0.001 :
+        if (cosysN["O"] - cosysPre["H"]).dot( cosysN["z-unit"]-cosysN["O"] ) < 0 :
+            jointDHParam[2] = -jointDHParam[2]
+
+    # 参数theta
+    jointDHParam[3] = linesAngle(cosysPre["x-unit"]-cosysPre["O"], cosysN["x-unit"]-cosysN["O"], cosysN["z-unit"]-cosysN["O"])
 
     return
 
 def drawJointDHGuide(jointIdx):
 
-    # z axes
-    line(joints_cosys[jointIdx]["O"], joints_cosys[jointIdx]["z-unit"], "z-axes")
-    # x axes
-    line(joints_cosys[jointIdx]["O"], joints_cosys[jointIdx]["x-unit"], "x-axes")
-    # line a
-    if joints_cosys[jointIdx]["H"] != None :
-        line(joints_cosys[jointIdx]["O"], joints_cosys[jointIdx]["H"], "DH-a")
-    # line d
-    line(joints_cosys[jointIdx]["O"], joints_cosys[jointIdx-1]["H"], "DH-d")
+    o = joints_cosys[jointIdx]["O"]
 
+    # 画两根线，o-p1 和 o-p2 共线，先画长的那一根，以免短的被盖住
+    def drawTwoLine (p1, color1, p2, color2) :
+        if (p1-o).magnitude > (p2-o).magnitude :
+            line(o, p1, color1)
+            line(o, p2, color2)
+        else:
+            line(o, p2, color2)
+            line(o, p1, color1)
 
+    # line a 和 x axes
+    drawTwoLine(joints_cosys[jointIdx]["H"],"DH-a", joints_cosys[jointIdx]["x-unit"],"x-axes")
+
+    # line d 和 z axes
+    drawTwoLine(joints_cosys[jointIdx - 1]["H"], "DH-d", joints_cosys[jointIdx]["z-unit"], "z-axes")
 
 
 def redrawGuide():
@@ -301,9 +321,14 @@ def redrawGuide():
     # 标定关节 1-6 的坐标系
     for idx in range(7) :
         measureCoordinateSystem(idx)
+    # 关节6的坐标系的 H 值，用于计算关节6的 DH 参数a
+    joints_cosys[6]["H"] = bpy.context.scene.objects["link7"].matrix_world.translation
+
     # 标定关节 1-6 的DH参数
     for idx in range(1,7) :
         measureDHConstValue(idx)
+
+        # 绘制辅助线
         if getattr(bpy.context.scene, "joint"+str(idx)+"_drawDHGuide") == True :
             drawJointDHGuide(idx)
 
