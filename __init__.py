@@ -52,15 +52,18 @@ class ArmControlPanel(bpy.types.Panel):
         func_operator(layout.row(), "重绘 DH辅助线", ("DH_helper","redrawGuide")) \
             ("清除 DH辅助线", ("DH_helper","clearGuide"))
 
+        def outputForwardKinematics() :
+            for i, T in enumerate(load("kinematics").fkMatrixes()) :
+                output(str(i-1)+"~"+str(i), load("DH_helper").formatMatrix(T))
+
         layout.separator()
-        func_operator(layout.row(), "正运动学", ("kinematics","forword"), passContext=True)
-        func_operator(layout.row(), ">>>DH常量", ("DH_helper", "outputDHConst")) \
+        func_operator(layout.row(), "正运动学", ("kinematics","forword")) \
+            (">>>fk变换矩阵", outputForwardKinematics) \
+            (">>>ik noap", lambda : output(load("kinematics").ikTargetNOAP()) ) \
+            (">>>ik求解", ("kinematics","inverse") )
+        func_operator(layout.row(), ">>>DH常量", ("kinematics", "outputDHConst")) \
             (">>>DH变换矩阵", ("DH_helper", "outputDHEquation")) \
-            (">>>目标noa", lambda :
-                output(load("DH_helper").formatMatrix(context.scene.objects["target"].matrix_world)) \
-                          if "target" in context.scene.objects \
-                          else output("missing object named 'target'")
-            )
+            (">>>target noap", lambda : output(context.scene.objects["target"].matrix_world) )
 
         layout.separator()
         func_operator(layout.row(), "执行脚本", lambda : load("DH_helper"))
@@ -177,7 +180,7 @@ class FunctionOperator(bpy.types.Operator):
         return {"FINISHED"}
 
 def func_operator(row, text, func, passContext=False) :
-    def create_func_operator(text, func):
+    def create_func_operator(text, func, passContext=False):
         if isinstance(func, tuple) :
             modulename = func[0]
             funcname = func[1]
@@ -191,7 +194,7 @@ def func_operator(row, text, func, passContext=False) :
         op.passContext = passContext
 
         return create_func_operator
-    return create_func_operator(text, func)
+    return create_func_operator(text, func, passContext)
 
 
 

@@ -82,8 +82,6 @@ def line(endpoint1, endpoint2, colorname="default") :
 
     return str
 
-print("file:::::::",__name__)
-
 
 def clearGuide():
     fr = gpLayerFrame(bpy.context)
@@ -423,12 +421,3 @@ simplify( """
     #
     # output(codetpl)
 
-
-def outputDHConst():
-    txt = ""
-    for i in range(1,7) :
-        jointDHParam = getattr(bpy.context.scene, "joint" + str(i) + "_DH")
-        txt+= "a"+str(i) + "=" + str(jointDHParam[0]) + "\n"
-        txt+= "α"+str(i) + "=" + str(jointDHParam[1]) + "\n"
-        txt+= "d"+str(i) + "=" + str(jointDHParam[2]) + "\n"
-    output(txt)
