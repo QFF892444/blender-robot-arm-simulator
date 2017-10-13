@@ -53,22 +53,36 @@ def noscale(matrix_world):
     invert_scale.invert()
     return matrix_world * invert_scale
 
-def forword():
+def forword(jointNum=None):
+
     if not "target" in bpy.context.scene.objects :
         return
 
-    # 世界坐标系原点
-    matrix_world = Matrix([
-        [1,0,0,0] ,
-        [0,1,0,0] ,
-        [0,0,1,0] ,
-        [0,0,0,1] ,
-    ])
+    if jointNum==None:
+        # 世界坐标系原点
+        matrix_world = Matrix([
+            [1,0,0,0] ,
+            [0,1,0,0] ,
+            [0,0,1,0] ,
+            [0,0,0,1] ,
+        ])
 
-    for T in fkMatrixes() :
-       matrix_world *= T
+        for T in fkMatrixes() :
+           matrix_world *= T
 
-    bpy.context.scene.objects["target"].matrix_world = matrix_world
+        bpy.context.scene.objects["target"].matrix_world = matrix_world
+
+    elif jointNum == -1 :
+        bpy.context.scene.objects["target"].matrix_world = Matrix([
+            [1,0,0,0] ,
+            [0,1,0,0] ,
+            [0,0,1,0] ,
+            [0,0,0,1] ,
+        ])
+    else:
+        bpy.context.scene.objects["target"].matrix_world = \
+                bpy.context.scene.objects["target"].matrix_world * fkMatrixes() [jointNum]
+
 
 # 完整的运动学变换过程如下：
 #   noap = T(-1,0) * T(0,1) * T(1,6) * T(6,7)

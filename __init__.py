@@ -57,8 +57,18 @@ class ArmControlPanel(bpy.types.Panel):
                 output(str(i-1)+"~"+str(i), load("DH_helper").formatMatrix(T))
 
         layout.separator()
-        func_operator(layout.row(), "正运动学", ("kinematics","forword")) \
-            (">>>fk变换矩阵", outputForwardKinematics) \
+        func_operator(layout.row(), "正运动学变换", ("kinematics","forword")) \
+            ("目标归位", ("kinematics","forword"), args=[-1])
+        func_operator(layout.row(), "-1>0", ("kinematics","forword"), args=[0]) \
+            ("0-1", ("kinematics","forword"), args=[1]) \
+            ("1>2", ("kinematics","forword"), args=[2]) \
+            ("2>3", ("kinematics","forword"), args=[3]) \
+            ("3>4", ("kinematics","forword"), args=[4]) \
+            ("4>5", ("kinematics","forword"), args=[5]) \
+            ("5>6", ("kinematics","forword"), args=[6]) \
+            ("6>7", ("kinematics","forword"), args=[7])
+
+        func_operator(layout.row(), ">>>fk变换矩阵", outputForwardKinematics) \
             (">>>ik noap", lambda : output(load("kinematics").ikTargetNOAP()) ) \
             (">>>ik求解", ("kinematics","inverse") )
         func_operator(layout.row(), ">>>DH常量", ("kinematics", "outputDHConst")) \
@@ -179,22 +189,28 @@ class FunctionOperator(bpy.types.Operator):
                 operation_funcs[self.funcid]()
         return {"FINISHED"}
 
-def func_operator(row, text, func, passContext=False) :
-    def create_func_operator(text, func, passContext=False):
+def func_operator(row, text, func, passContext=False, options=None, args=[]) :
+
+    def create_func_operator(text, func, passContext=False, options=None, args=[]):
         if isinstance(func, tuple) :
             modulename = func[0]
             funcname = func[1]
             if passContext :
-                func = lambda context: getattr(load(modulename),funcname)(context)
+                func = lambda context: getattr(load(modulename),funcname)(*(context+args))
             else:
-                func = lambda : getattr(load(modulename),funcname)()
+                func = lambda : getattr(load(modulename),funcname)(*args)
         op = row.operator(FunctionOperator.bl_idname, text=text)
         operation_funcs.append(func)
         op.funcid = len(operation_funcs)-1
         op.passContext = passContext
 
+        if options!=None :
+            for key in options :
+                setattr(op, key, options[key])
+
         return create_func_operator
-    return create_func_operator(text, func, passContext)
+
+    return create_func_operator(text, func, passContext, options, args)
 
 
 
