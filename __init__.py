@@ -28,9 +28,12 @@ class ArmControlPanel(bpy.types.Panel):
         scene = context.scene
 
         layout.row().operator("view3d.init_all_joints_value", text="初始位置")
-
         for i in range(1,7) :
             drawJointAngleUI(scene, layout, i)
+
+        layout.separator()
+
+        layout.row().prop(scene, "preposingAxesZ", text="坐标系前置")
 
         row = layout.row()
         row.label(" ")
@@ -40,7 +43,7 @@ class ArmControlPanel(bpy.types.Panel):
         row.label("θ")
         for i in range(1,7) :
             row = layout.row()
-            row.prop(scene, "joint"+str(i)+"_drawDHGuide", text=str(i-1)+"-"+str(i)+" 辅助线")
+            row.prop(scene, "joint"+str(i)+"_drawDHGuide", text="关节"+str(i))
             row.prop(scene, "joint" + str(i) + "_DH", text="")
 
         layout.separator()
@@ -72,7 +75,6 @@ class ArmControlPanel(bpy.types.Panel):
             (">>>ik noap", lambda : output(load("kinematics").ikTargetNOAP()) ) \
             (">>>ik求解", ("kinematics","inverse") )
         func_operator(layout.row(), ">>>DH常量", ("kinematics", "outputDHConst")) \
-            (">>>DH变换矩阵", ("DH_helper", "outputDHEquation")) \
             (">>>target noap", lambda : output(context.scene.objects["target"].matrix_world) )
 
         layout.separator()
@@ -87,7 +89,6 @@ class ArmControlPanel(bpy.types.Panel):
 
 
 def drawJointAngleUI(obj, layout, index) :
-    layout.separator()
     row = layout.row()
     row.prop(obj, "joint"+str(index)+"_value", text="关节"+str(index)+"角度值")
 
@@ -283,6 +284,8 @@ def register():
     bpy.types.Scene.fkStartJoint = IntProperty(default=1)
     bpy.types.Scene.fkEndJoint = IntProperty(default=6)
 
+
+    bpy.types.Scene.preposingAxesZ = BoolProperty(default=True)
 
     # bpy.types.Scene.DH_a = FloatVectorProperty(size=6)
     # bpy.types.Scene.DH_alpha = FloatVectorProperty(size=6)

@@ -58,3 +58,8 @@ def load(name) :
     else:
         scriptcache[modulename] = importlib.import_module(modulename)
     return scriptcache[modulename]
+
+
+# 是否为 坐标系前置
+def isPreposing() :
+    return bpy.context.scene.preposingAxesZ
