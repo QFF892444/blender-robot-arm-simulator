@@ -59,14 +59,14 @@ class ArmControlPanel(bpy.types.Panel):
         layout.separator()
         func_operator(layout.row(), "正运动学变换", ("kinematics","forword")) \
             ("目标归位", ("kinematics","forword"), args=[-1])
-        func_operator(layout.row(), "-1>0", ("kinematics","forword"), args=[0]) \
+        row = layout.row()
+        func_operator(row, "-1>0", ("kinematics","forword"), args=[0]) \
             ("0-1", ("kinematics","forword"), args=[1]) \
-            ("1>2", ("kinematics","forword"), args=[2]) \
-            ("2>3", ("kinematics","forword"), args=[3]) \
-            ("3>4", ("kinematics","forword"), args=[4]) \
-            ("4>5", ("kinematics","forword"), args=[5]) \
-            ("5>6", ("kinematics","forword"), args=[6]) \
             ("6>7", ("kinematics","forword"), args=[7])
+
+        row.prop(scene, "fkStartJoint", text="从关节")
+        row.prop(scene, "fkEndJoint", text="到关节")
+        func_operator(row, "正变换", lambda : load("kinematics").fkTransformation(scene.fkStartJoint,scene.fkEndJoint))
 
         func_operator(layout.row(), ">>>fk变换矩阵", outputForwardKinematics) \
             (">>>ik noap", lambda : output(load("kinematics").ikTargetNOAP()) ) \
@@ -76,7 +76,14 @@ class ArmControlPanel(bpy.types.Panel):
             (">>>target noap", lambda : output(context.scene.objects["target"].matrix_world) )
 
         layout.separator()
-        func_operator(layout.row(), "执行脚本", lambda : load("DH_helper"))
+        row = layout.row()
+        row.prop(scene, "jointsDifferentialMotion", text="微分运动")
+        func_operator(layout.row(), ">>>雅可比矩阵", ("jacobian", "outputJacobianMatrix")) \
+                        (">>>微分算子Δ", ("jacobian", "outputDifferentialOperator")) \
+                        (">>>测试雅可比", ("jacobian", "testJacobian")) \
+                        (">>>测试雅可比2", ("jacobian", "testJacobian2"))
+
+
 
 
 def drawJointAngleUI(obj, layout, index) :
@@ -271,6 +278,11 @@ def register():
     bpy.types.Scene.joint4_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint5_DH = FloatVectorProperty(size=4)
     bpy.types.Scene.joint6_DH = FloatVectorProperty(size=4)
+
+    bpy.types.Scene.jointsDifferentialMotion = FloatVectorProperty(size=6)
+    bpy.types.Scene.fkStartJoint = IntProperty(default=1)
+    bpy.types.Scene.fkEndJoint = IntProperty(default=6)
+
 
     # bpy.types.Scene.DH_a = FloatVectorProperty(size=6)
     # bpy.types.Scene.DH_alpha = FloatVectorProperty(size=6)

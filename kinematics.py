@@ -5,6 +5,8 @@ from math import cos, sin, radians, sqrt
 from mathutils import Matrix, Euler
 
 
+
+
 def fkMatrixes() :
 
     matrixes = []
@@ -24,10 +26,10 @@ def fkMatrixes() :
         θN = radians(jointDHN[3])
 
         matrixes.append(Matrix([
-            [            cos(θN),            -sin(θN),            0,           aPre ],
+            [           cos(θN),           -sin(θN),           0,           aPre ],
             [ sin(θN)*cos(αPre),  cos(θN)*cos(αPre),  -sin(αPre),  -dN*sin(αPre) ],
             [ sin(θN)*sin(αPre),  cos(θN)*sin(αPre),   cos(αPre),   dN*cos(αPre) ],
-            [                   0,                    0,           0,               1 ]
+            [                 0,                  0,           0,              1 ]
         ]))
 
     # 从手腕移动到机械臂末端
@@ -39,6 +41,7 @@ def fkMatrixes() :
     ]))
 
     return matrixes
+
 
 
 def noscale(matrix_world):
@@ -149,4 +152,16 @@ def joint3_equation(p) :
 
     # output(solutions)
 
+    return
+
+def T(fromJoint, toJoint) :
+    matrixes = fkMatrixes()[fromJoint:toJoint+1]
+    t = matrixes[0]
+    for i in range(1, len(matrixes)) :
+        t*= matrixes[i]
+    return t
+
+def fkTransformation(fromJoint, toJoint) :
+    target = bpy.context.scene.objects["target"]
+    target.matrix_world = target.matrix_world * T(fromJoint, toJoint)
     return
