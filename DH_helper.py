@@ -143,7 +143,7 @@ def linesAngle(d1, d2, axes=None) :
         acos_value = 1.0
     if acos_value<-1 :
         acos_value = -1.0
-    degree = math.acos( acos_value ) * 180.0/math.pi
+    degree = math.acos( acos_value ) / math.pi * 180.0
 
     if degree<0.01 :
         degree = 0
@@ -254,7 +254,7 @@ def measurePostposingFrame(cosysIdx):
     # 坐标系n 对应 关节n+1
     cosysN = joints_cosys[cosysIdx]
 
-    # 关节n 和 关节n-1 的z轴射线表达式参数
+    # 坐标系n 和 坐标系n-1 的z轴射线表达式参数
     (pN, dN) = zAxes(cosysIdx+1)
     (pPre, dPre) = zAxes(cosysIdx)
 
@@ -291,30 +291,29 @@ def measurePostposingFrame(cosysIdx):
 
 
 # 后置坐标系的 DH参数测定
-# 坐标系n 在 关节n+1 上
-def measurePostposingDHConst(cosysIdx):
+def measurePostposingDHConst(jointN):
 
-    jointDHParam = getattr(bpy.context.scene, "joint"+str(cosysIdx+1)+"_DH")
-    cosysN = joints_cosys[cosysIdx]
-    cosysPre = joints_cosys[cosysIdx-1]
-    cosysNext = joints_cosys[cosysIdx+1]
+    jointDHParam = getattr(bpy.context.scene, "joint"+str(jointN)+"_DH")
+
+    cosysPre = joints_cosys[jointN-1]
+    cosysN = joints_cosys[jointN]
 
     # 参数a
-    jointDHParam[0] = (cosysNext["O"] - cosysNext["H"]).magnitude
+    jointDHParam[0] = (cosysN["O"] - cosysN["H"]).magnitude
 
     # 参数alpha
-    jointDHParam[1] = linesAngle(cosysN["z-unit"]-cosysN["O"], cosysNext["z-unit"]-cosysNext["O"], cosysNext["x-unit"]-cosysNext["O"])
+    jointDHParam[1] = linesAngle(cosysPre["z-unit"]-cosysPre["O"], cosysN["z-unit"]-cosysN["O"], cosysN["x-unit"]-cosysN["O"])
 
     # 参数d
-    jointDHParam[2] = (cosysNext["H"]-cosysN["O"]).magnitude
+    jointDHParam[2] = (cosysN["H"]-cosysPre["O"]).magnitude
 
     # 根据和z轴的方向，确定正负
     if abs(jointDHParam[2])>0.001 :
-        if (cosysNext["H"]-cosysN["O"]).dot( cosysN["z-unit"]-cosysN["O"] ) < 0 :
+        if (cosysN["H"]-cosysPre["O"]).dot( cosysPre["z-unit"]-cosysPre["O"] ) < 0 :
             jointDHParam[2] = -jointDHParam[2]
 
     # 参数theta
-    jointDHParam[3] = linesAngle(cosysN["x-unit"]-cosysN["O"], cosysNext["x-unit"]-cosysNext["O"], cosysN["z-unit"]-cosysN["O"])
+    jointDHParam[3] = linesAngle(cosysPre["x-unit"]-cosysPre["O"], cosysN["x-unit"]-cosysN["O"], cosysPre["z-unit"]-cosysPre["O"])
 
     return
 
@@ -368,11 +367,14 @@ def redrawGuide():
 
     else:
         # 标定关节 0-6 的坐标系
-        for idx in range(7) :
+        for idx in range(0,7) :
             measurePostposingFrame(idx)
+        # 底座坐标系的x轴
+        cosys0 = joints_cosys[0]
+        cosys0["x-unit"] = Vector((50,0,0))
 
         # 标定关节 1-6 的DH参数
-        for idx in range(0, 6):
+        for idx in range(1, 7):
             measurePostposingDHConst(idx)
 
     for idx in range(1,7) :
