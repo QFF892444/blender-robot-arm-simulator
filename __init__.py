@@ -27,24 +27,30 @@ class ArmControlPanel(bpy.types.Panel):
 
         scene = context.scene
 
-        layout.row().operator("view3d.init_all_joints_value", text="初始位置")
+        layout.row().operator(InitAllJointsValue.bl_idname, text="重置所有关节到初始位置") \
+            .joint_idx = -1
         for i in range(1,7) :
-            drawJointAngleUI(scene, layout, i)
+            split = layout.split(percentage=0.15)
+            op = split.column().operator(InitAllJointsValue.bl_idname, text="初始值") \
+                            .joint_idx = i
+            split.column().prop(scene, "joint" + str(i) + "_value", text="关节" + str(i) + "角度值")
 
         layout.separator()
 
-        layout.row().prop(scene, "preposingAxesZ", text="坐标系前置")
+        row = layout.row()
+        row.prop(scene, "preposingAxesZ", text="坐标系前置")
+        func_operator(row, "重建DH模型", ("DH_helper", "rebuildDHModel"), passContext=True)
 
         row = layout.row()
         row.label(" ")
+        row.label("θ")
+        row.label("d")
         row.label("a")
         row.label("α")
-        row.label("d")
-        row.label("θ")
         for i in range(1,7) :
             row = layout.row()
-            row.prop(scene, "joint"+str(i)+"_drawDHGuide", text="关节"+str(i))
-            row.prop(scene, "joint" + str(i) + "_DH", text="")
+            # row.prop(scene, "joint"+str(i)+"_drawDHGuide", text="关节"+str(i))
+            row.prop(scene, "joint"+str(i)+"_DH", text="")
 
         layout.separator()
         row = layout.row()
@@ -88,63 +94,36 @@ class ArmControlPanel(bpy.types.Panel):
 
 
 
-def drawJointAngleUI(obj, layout, index) :
-    row = layout.row()
-    row.prop(obj, "joint"+str(index)+"_value", text="关节"+str(index)+"角度值")
-
-    row = layout.row()
-    op = row.operator("view3d.set_joint_value", text="最小")
-    op.request_position = "min"
-    op.joint_index = index
-    op = row.operator("view3d.set_joint_value", text="中值")
-    op.request_position = "middle"
-    op.joint_index = index
-    op = row.operator("view3d.set_joint_value", text="最大")
-    op.request_position = "max"
-    op.joint_index = index
-
-
-def createJointValueUpdate(jointIdx)  :
-    def update(self, context) :
-        context.scene.objects["link"+str(jointIdx)].rotation_euler[meta_joints[jointIdx]["axle"]] = math.radians( context.scene["joint"+str(jointIdx)+"_value"] )
-        # 更新 D-H 辅助线
-        load("DH_helper").redrawGuide()
-    return update
 
 
 
-
-class SetJointValue(bpy.types.Operator):
-    bl_idname = "view3d.set_joint_value"
-    bl_label = "Set Joint value"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    joint_index = IntProperty()
-    request_position = StringProperty(default='middle')
-
-    def execute(self, context):
-
-        if self.request_position=="min" :
-            value = - meta_joints[self.joint_index]['max']
-        elif self.request_position=="middle" :
-            value = 0
-        elif self.request_position=="max" :
-            value = meta_joints[self.joint_index]['max']
-
-        joint_name = "joint"+str(self.joint_index)+"_value"
-        linkName = "link" + str(self.joint_index)
-
-        axle = meta_joints[self.joint_index]["axle"]
-        context.scene.objects[linkName].rotation_euler[axle] = math.radians(value)
-        context.scene[joint_name] = value
-
-        # 更新 D-H 辅助线
-        load("DH_helper").redrawGuide()
-
-        # 更新 Theta 值
-        jointDHParam = getattr(bpy.context.scene, "joint" + str(self.joint_index) + "_DH")
-
-        return {"FINISHED"}
+# class SetJointValue(bpy.types.Operator):
+#     bl_idname = "view3d.set_joint_value"
+#     bl_label = "Set Joint value"
+#     bl_options = {'REGISTER', 'UNDO'}
+#
+#     joint_index = IntProperty()
+#     request_position = StringProperty(default='middle')
+#
+#     def execute(self, context):
+#
+#         if self.request_position=="min" :
+#             value = - meta_joints[self.joint_index]['max']
+#         elif self.request_position=="middle" :
+#             value = 0
+#         elif self.request_position=="max" :
+#             value = meta_joints[self.joint_index]['max']
+#
+#         joint_name = "joint"+str(self.joint_index)+"_value"
+#         frameName = "frame" + str(self.joint_index)
+#
+#         context.scene.objects[frameName].rotation_euler[2] = math.radians(value)
+#         context.scene[joint_name] = value
+#
+#         # 更新 D-H 辅助线
+#         load("DH_helper").redrawGuide()
+#
+#         return {"FINISHED"}
 
 
 class InitAllJointsValue(bpy.types.Operator):
@@ -152,18 +131,25 @@ class InitAllJointsValue(bpy.types.Operator):
     bl_label = "Initial all Joints Value"
     bl_options = {'REGISTER', 'UNDO'}
 
+    joint_idx = IntProperty(0)
+
     def execute(self, context):
 
-        for idx in range(1,7) :
-            joint_name = "joint"+str(idx)+"_value"
-            context.scene[joint_name] = 0
-            meta_joints[idx]['update'](self, context)
+        output(self.joint_idx)
 
-            # 更新 Theta 值
-            jointDHParam = getattr(bpy.context.scene, "joint" + str(idx) + "_DH")
+        if self.joint_idx<=0 or self.joint_idx>6 :
+
+            for idx in range(1,7) :
+                joint_name = "joint"+str(idx)+"_value"
+                context.scene[joint_name] = 0
+                meta_joints[idx]['update'](self, context)
+        else :
+            joint_name = "joint"+str(self.joint_idx)+"_value"
+            context.scene[joint_name] = 0
+            meta_joints[self.joint_idx]['update'](self, context)
 
         # 更新 D-H 辅助线
-        load("DH_helper").redrawGuide()
+        load("DH_helper").updateTheta(context)
 
         return {"FINISHED"}
 
@@ -204,7 +190,7 @@ def func_operator(row, text, func, passContext=False, options=None, args=[]) :
             modulename = func[0]
             funcname = func[1]
             if passContext :
-                func = lambda context: getattr(load(modulename),funcname)(*(context+args))
+                func = lambda context: getattr(load(modulename),funcname)(*([context]+args))
             else:
                 func = lambda : getattr(load(modulename),funcname)(*args)
         op = row.operator(FunctionOperator.bl_idname, text=text)
@@ -225,35 +211,37 @@ def func_operator(row, text, func, passContext=False, options=None, args=[]) :
 
 
 
+
+def createJointValueUpdate(jointIdx)  :
+    def update(self, context) :
+        context.scene.objects["frame"+str(jointIdx)].rotation_euler[2] = math.radians( context.scene["joint"+str(jointIdx)+"_value"] )
+        # 更新 D-H
+        load("DH_helper").updateTheta(context)
+    return update
+
 meta_joints = {
     1: {
         "max": 135,
-        "axle": 2,
         "update": createJointValueUpdate(1),
     },
     2: {
         "max": 90,
-        "axle": 1,
         "update": createJointValueUpdate(2),
     },
     3: {
         "max": 135,
-        "axle": 1,
         "update": createJointValueUpdate(3),
     },
     4: {
         "max": 90,
-        "axle": 2,
         "update": createJointValueUpdate(4),
     },
     5: {
         "max": 135,
-        "axle": 1,
         "update": createJointValueUpdate(5),
     },
     6: {
         "max": 90,
-        "axle": 2,
         "update": createJointValueUpdate(6),
     },
 

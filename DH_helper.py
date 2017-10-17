@@ -345,42 +345,37 @@ def drawJointDHGuide(jointIdx):
             line(o, joints_cosys[jointIdx]["z-unit"], "z-axes")
 
 
+# 重建 DH 模型
+def rebuildDHModel(context):
 
-def redrawGuide():
-
-    clearGuide()
-
-    if isPreposing() :
-        # 标定关节 0-6 的坐标系
-        for idx in range(7) :
-            measurePreposingFrame(idx)
-        # 关节6的坐标系的 H 值，用于计算关节6的 DH 参数a
-        joints_cosys[6]["H"] = bpy.context.scene.objects["link7"].matrix_world.translation
-
-        # 标定关节 1-6 的DH参数
-        for idx in range(1,7) :
-            measurePreposingDHConst(idx)
-
-
-        # 最后一个关节的参数d 为到末端的距离
-        # getattr(bpy.context.scene, "joint6_DH")[2] = (bpy.context.scene.objects["arm-end"].location - joints_cosys[6]["O"]).magnitude
-
-    else:
-        # 标定关节 0-6 的坐标系
-        for idx in range(0,7) :
-            measurePostposingFrame(idx)
-        # 底座坐标系的x轴
-        cosys0 = joints_cosys[0]
-        cosys0["x-unit"] = Vector((50,0,0))
-
-        # 标定关节 1-6 的DH参数
-        for idx in range(1, 7):
-            measurePostposingDHConst(idx)
+    objecst = context.scene.objects
 
     for idx in range(1,7) :
-        # 绘制辅助线
-        if getattr(bpy.context.scene, "joint" + str(idx) + "_drawDHGuide") == True:
-            drawJointDHGuide(idx)
+        DHParam = getattr(context.scene, "joint"+str(idx)+"_DH")
+        axesX = objecst["x"+str(idx)]
+        axesZ = objecst["z"+str(idx)]
+        # d
+        DHParam[1] = axesX.location.z
+        # a
+        DHParam[2] = axesX.location.x
+        # Alpha
+        DHParam[3] = axesZ.rotation_euler.x/math.pi*180
+
+    # update jotin variable Theta
+    updateTheta(context)
+
+
+def updateTheta(context) :
+    objecst = context.scene.objects
+    for idx in range(1,7) :
+        frame = objecst["frame"+str(idx)]
+        DHParam = getattr(context.scene, "joint"+str(idx)+"_DH")
+        DHParam[0] = frame.rotation_euler.z/math.pi*180
+
+
+
+
+
 
 
 def formatMatrix(m) :
