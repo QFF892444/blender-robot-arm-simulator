@@ -11,12 +11,8 @@ def fkMatrixes() :
 
     matrixes = []
 
-    # -1 到 0 的变换矩阵（世界坐标系原点 到 机械臂基座）
-    link0 = bpy.context.scene.objects["link0"]
-    matrixes.append( noscale(link0.matrix_world) )
-
     # 从基座移动到手腕 (关节1-6的变换矩阵)
-    for jointN in range(1,7)  :
+    for jointN in range(0,7)  :
 
         jointDHN = getattr(bpy.context.scene, "joint"+str(jointN)+"_DH")
 
@@ -24,10 +20,10 @@ def fkMatrixes() :
 
             jointDHPre = getattr(bpy.context.scene, "joint"+str(jointN-1)+"_DH")
 
-            aPre = jointDHPre[0]
-            αPre = radians(jointDHPre[1])
-            dN = jointDHN[2]
-            θN = radians(jointDHN[3])
+            aPre = jointDHPre[2]
+            αPre = radians(jointDHPre[3])
+            dN = jointDHN[1]
+            θN = radians(jointDHN[0])
 
             matrixes.append(Matrix([
                 [           cos(θN),           -sin(θN),           0,           aPre ],
@@ -38,10 +34,10 @@ def fkMatrixes() :
 
         else :
 
-            a = jointDHN[0]
-            α = radians(jointDHN[1])
-            d = jointDHN[2]
-            θ = radians(jointDHN[3])
+            θ = radians(jointDHN[0])
+            d = jointDHN[1]
+            a = jointDHN[2]
+            α = radians(jointDHN[3])
 
             C = cos(θ)
             S = sin(θ)
@@ -54,14 +50,6 @@ def fkMatrixes() :
                 [0,    Sα,    Cα,   d] ,
                 [0,     0,     0,   1]
             ]))
-
-    # 从手腕移动到机械臂末端
-    matrixes.append(Matrix([
-        [1,0,0,0],
-        [0,1,0,0],
-        [0,0,1,bpy.context.scene.joint6_DH[0]],
-        [0,0,0,1]
-    ]))
 
     return matrixes
 

@@ -118,7 +118,8 @@ class ArmControlPanel(bpy.types.Panel):
 #         frameName = "frame" + str(self.joint_index)
 #
 #         context.scene.objects[frameName].rotation_euler[2] = math.radians(value)
-#         context.scene[joint_name] = value
+#         context.scene[joint_name] =
+# value
 #
 #         # 更新 D-H 辅助线
 #         load("DH_helper").redrawGuide()
