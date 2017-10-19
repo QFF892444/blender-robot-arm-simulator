@@ -8,6 +8,7 @@ import math, importlib
 import bpy
 from mathutils import Vector
 from bpy.props import FloatProperty, FloatVectorProperty, BoolProperty, IntProperty, StringProperty
+from math import pi
 
 from . import common
 importlib.reload(common)
@@ -27,8 +28,19 @@ class ArmControlPanel(bpy.types.Panel):
 
         scene = context.scene
 
-        layout.row().operator(InitAllJointsValue.bl_idname, text="重置所有关节到初始位置") \
+        def posR() :
+            load("DH_helper").setJoints((0, pi/2, -pi/2, 0,0,0))
+        def posS() :
+            load("DH_helper").setJoints((0, 0, -pi/2, 0,0,0))
+        def posN() :
+            load("DH_helper").setJoints((0, pi/4, -pi, 0,pi/4,0))
+        row = layout.row()
+        row.operator(InitAllJointsValue.bl_idname, text="初始姿势") \
             .joint_idx = -1
+        func_operator(row, "就绪姿势", posR) \
+                    ("伸展姿势", posS) \
+                    ("灵巧姿势", posN)
+
         for i in range(1,7) :
             split = layout.split(percentage=0.15)
             op = split.column().operator(InitAllJointsValue.bl_idname, text="初始值") \
@@ -39,7 +51,8 @@ class ArmControlPanel(bpy.types.Panel):
 
         row = layout.row()
         row.prop(scene, "preposingAxesZ", text="坐标系前置")
-        func_operator(row, "重建DH模型", ("DH_helper", "rebuildDHModel"), passContext=True)
+        func_operator(row, "标定DH模型", ("DH_helper", "measureDHModel"), passContext=True)
+        func_operator(row, "应用DH模型", ("DH_helper", "applyDHModel"), passContext=True)
 
         row = layout.row()
         row.label(" ")
@@ -88,12 +101,8 @@ class ArmControlPanel(bpy.types.Panel):
         row.prop(scene, "jointsDifferentialMotion", text="微分运动")
         func_operator(layout.row(), ">>>雅可比矩阵", ("jacobian", "outputJacobianMatrix")) \
                         (">>>微分算子Δ", ("jacobian", "outputDifferentialOperator")) \
-                        (">>>测试雅可比", ("jacobian", "testJacobian")) \
-                        (">>>测试雅可比2", ("jacobian", "testJacobian2"))
-
-
-
-
+                        (">>>测试雅可比", ("jacobian", "testJacobian"), passContext=True) \
+                        (">>>测试雅可比2", ("jacobian", "testJacobian2"), passContext=True)
 
 
 
@@ -135,8 +144,6 @@ class InitAllJointsValue(bpy.types.Operator):
     joint_idx = IntProperty(0)
 
     def execute(self, context):
-
-        output(self.joint_idx)
 
         if self.joint_idx<=0 or self.joint_idx>6 :
 
@@ -231,6 +238,7 @@ meta_joints = {
     },
     3: {
         "max": 135,
+        "update": createJointValueUpdate(3),
         "update": createJointValueUpdate(3),
     },
     4: {

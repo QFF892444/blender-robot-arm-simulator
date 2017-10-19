@@ -2,9 +2,9 @@
 # importlib.sys.modules['blender-robot-arm-simulator.DH_helper']
 
 import bpy, math
-from mathutils import Vector
+from mathutils import Vector, Euler
 from .common import output, isPreposing
-
+from math import radians
 
 
 def initGP(context):
@@ -346,7 +346,7 @@ def drawJointDHGuide(jointIdx):
 
 
 # 重建 DH 模型
-def rebuildDHModel(context):
+def measureDHModel(context):
 
     objecst = context.scene.objects
 
@@ -374,8 +374,36 @@ def updateTheta(context) :
 
 
 
+# 根据 DH 模型移动 各个关节坐标
+def applyDHModel(context) :
+
+    for jointN in range(1,7) :
+
+        params = getattr(context.scene,"joint"+str(jointN)+"_DH")
+
+        theta = params[0]
+        d = params[1]
+        a = params[2]
+        alpha = params[3]
+
+        frameN = context.scene.objects["frame"+str(jointN)]
+        frameN.location = Vector((0,0,0))
+        frameN.rotation_euler = Euler((0,0,radians(theta)))
+
+        xN = context.scene.objects["x"+str(jointN)]
+        xN.location = Vector((a,0,d))
+
+        zN = context.scene.objects["z"+str(jointN)]
+        zN.rotation_euler = Euler((radians(alpha),0,0))
+
+    return
 
 
+def setJoints(q) :
+    for i in range(len(q)):
+        params = getattr(bpy.context.scene,"joint"+str(i+1)+"_DH")
+        params[0] = q[i]/math.pi * 180
+    applyDHModel(bpy.context)
 
 
 def formatMatrix(m) :

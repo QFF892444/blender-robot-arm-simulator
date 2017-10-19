@@ -7,18 +7,21 @@ from mathutils import Matrix, Euler
 
 
 
-def fkMatrixes() :
+def fkMatrixes(context=None) :
+
+    if context==None :
+        context = bpy.context
 
     matrixes = []
 
     # 从基座移动到手腕 (关节1-6的变换矩阵)
     for jointN in range(0,7)  :
 
-        jointDHN = getattr(bpy.context.scene, "joint"+str(jointN)+"_DH")
+        jointDHN = getattr(context.scene, "joint"+str(jointN)+"_DH")
 
         if isPreposing() :
 
-            jointDHPre = getattr(bpy.context.scene, "joint"+str(jointN-1)+"_DH")
+            jointDHPre = getattr(context.scene, "joint"+str(jointN-1)+"_DH")
 
             aPre = jointDHPre[2]
             αPre = radians(jointDHPre[3])
@@ -33,25 +36,50 @@ def fkMatrixes() :
             ]))
 
         else :
-
-            θ = radians(jointDHN[0])
-            d = jointDHN[1]
-            a = jointDHN[2]
-            α = radians(jointDHN[3])
-
-            C = cos(θ)
-            S = sin(θ)
-            Cα = cos(α)
-            Sα = sin(α)
-
-            matrixes.append(Matrix([
-                [C, -S*Cα,  S*Sα, a*C] ,
-                [S,  C*Cα, -C*Sα, a*S] ,
-                [0,    Sα,    Cα,   d] ,
-                [0,     0,     0,   1]
-            ]))
+            matrixes.append(fkJointMatrixe(jointN, context))
 
     return matrixes
+
+def fkJointMatrixe(jointN, context=None) :
+
+    if context==None:
+        context = bpy.context
+
+    jointDHN = getattr(context.scene, "joint"+str(jointN)+"_DH")
+
+    θ = radians(jointDHN[0])
+    d = jointDHN[1]
+    a = jointDHN[2]
+    α = radians(jointDHN[3])
+
+    C = cos(θ)
+    S = sin(θ)
+    Cα = cos(α)
+    Sα = sin(α)
+
+    return Matrix([
+        [C, -S*Cα,  S*Sα, a*C] ,
+        [S,  C*Cα, -C*Sα, a*S] ,
+        [0,    Sα,    Cα,   d] ,
+        [0,     0,     0,   1]
+    ])
+
+
+class FakeContext : pass
+def fakeContextDHModule(ThetaVars=None):
+
+    context = FakeContext()
+    setattr(context, "scene", FakeContext())
+    for i in range(0,7) :
+        real = getattr(bpy.context.scene, "joint"+str(i)+"_DH")
+        if i>0 and ThetaVars!=None and ThetaVars[i-1]!=None :
+            theta = ThetaVars[i-1]
+        else:
+            theta = real[0]
+        joint = (theta,real[1],real[2],real[3])
+        setattr(context.scene, "joint"+str(i)+"_DH", joint)
+
+    return context
 
 
 
@@ -140,15 +168,13 @@ def outputDHConst():
         txt+= "d"+str(i) + "=" + str(d) + "\n"
         output(txt)
 
-
-def T(fromJoint, toJoint) :
-    matrixes = fkMatrixes()[fromJoint:toJoint+1]
-    t = matrixes[0]
-    for i in range(1, len(matrixes)) :
-        t*= matrixes[i]
+def T(fromJoint, toJoint, context=None) :
+    t = fkJointMatrixe(fromJoint, context)
+    for i in range(fromJoint+1, toJoint+1) :
+        t*= fkJointMatrixe(i, context)
     return t
 
 def fkTransformation(fromJoint, toJoint) :
     target = bpy.context.scene.objects["target"]
-    target.matrix_world = target.matrix_world * T(fromJoint, toJoint)
+    target.matrix_world = target.matrix_world * T(fromJoint+1, toJoint)
     return

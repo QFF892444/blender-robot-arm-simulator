@@ -31,16 +31,14 @@ def transformMatrixWithoutθ(jointN) :
         ]), θN)
     else :
         θ = Symbol("θ" + str(jointN))
-
         a = Symbol("a" + str(jointN))
         α = Symbol("α" + str(jointN))
         d = Symbol("d" + str(jointN))
 
-
         DHParams = getattr(scene, "joint"+str(jointN)+"_DH")
-        a = DHParams[0]
-        α = DHParams[1]
-        d = DHParams[2]
+        d = DHParams[1]
+        a = DHParams[2]
+        α = radians(DHParams[3])
 
         C = cos(θ)
         S = sin(θ)
@@ -155,7 +153,7 @@ def buildJacobianMatrix() :
 
 def jointVarθ(jointIdx) :
     jointDH = getattr(bpy.context.scene, "joint" + str(jointIdx) + "_DH")
-    return radians(jointDH[3])
+    return radians(jointDH[0])
 
 # 微分算子
 def makeDifferentialOperator(jacobian, dθ) :
@@ -225,7 +223,7 @@ def outputDifferentialOperator():
 
 
 diffradian = 0.1
-jointNumber = 2
+jointNumber = 6
 
 
 def moveTargetAlongsJoints(toJoints) :
@@ -241,19 +239,30 @@ def moveTargetAlongsJoints(toJoints) :
 
     return target.matrix_world
 
-def testJacobian():
 
-    target = bpy.context.scene.objects["target"]
-    scene = bpy.context.scene
+def formatMatrix(m) :
+    for i in range(len(m)) :
+        if abs(m[i])<1e-7 :
+            m[i] = 0
+def formatOutput(m) :
+    formatMatrix(m)
+    text = "[\n"
+    for r in range(m.rows) :
+        text += "  ["
+        for c in range(m.cols):
+            text+= str( m[m.rows*r+c] ) + ", "
+        text += " ]\n"
 
-    load("DH_helper").redrawGuide()
+    text += "]\n"
 
-    output()
-    output()
+    output(text)
+
+
+    # 相对于末端坐标系的雅可比矩阵
+def jacob0() :
 
     # 构建相对于最后一个关节(而不是世界坐标系)的 Jacobian 矩阵
     JT = zeros(6,jointNumber)
-    varθ = []
     T = eye(4)
     for i in range(jointNumber, 0, -1) :
         TN, θ = transformMatrixWithoutθ(i)
@@ -271,6 +280,62 @@ def testJacobian():
         JT[4*jointNumber+i-1] = oz
         JT[5*jointNumber+i-1] = az
 
+    # JN0 = [ [ T.R zero3x3] [ zero3x3 T.R ] ]
+    JN0 = zeros(6,6)
+    JN0[0] = T[0]
+    JN0[1] = T[1]
+    JN0[2] = T[2]
+    JN0[6] = T[4]
+    JN0[7] = T[5]
+    JN0[8] = T[6]
+    JN0[12] = T[8]
+    JN0[13] = T[9]
+    JN0[14] = T[10]
+    JN0[21] = T[0]
+    JN0[22] = T[1]
+    JN0[23] = T[2]
+    JN0[27] = T[4]
+    JN0[28] = T[5]
+    JN0[29] = T[6]
+    JN0[33] = T[8]
+    JN0[34] = T[9]
+    JN0[35] = T[10]
+
+    return JN0 * JT
+
+
+def testJacobian(context):
+
+    J = jacob0()
+    formatOutput(J)
+
+    return
+
+    output()
+    output()
+
+    target = context.scene.objects["target"]
+    scene = context.scene
+
+    # 重建DH模型
+    load("DH_helper").updateTheta(context)
+
+    # 微分运动前、后的末端位姿
+    before = load("kinematics").fakeContextDHModule()
+    newθ = [ getattr(before.scene, "joint"+str(i)+"_DH")[0] + (diffradian/math.pi*180) for i in range(1,7)]
+    after = load("kinematics").fakeContextDHModule(newθ)
+
+    beforeT = load("kinematics").T(1,jointNumber,before)
+    afterT = load("kinematics").T(1,jointNumber,after)
+
+    target.matrix_world = afterT
+
+    changeT = afterT - beforeT
+    output("changeT =",changeT)
+
+    output("beforeT =", beforeT)
+
+    JT = jacobN()
     output("JT =", JT)
 
     dθ = Matrix( [[diffradian] for i in range(jointNumber)] )
@@ -298,44 +363,27 @@ def testJacobian():
 
     # target.matrix_world = toBpy(T0N)
 
-    global targetMatrixWorld
-    moveTargetAlongsJoints(jointNumber)
-    targetMatrixWorld = target.matrix_world.copy()
-    # targetMatrixWorld = toBpy(T)
-    output("target before =")
-    output(targetMatrixWorld)
 
+    posInaccuracy = changeT.col[3] - toBpy(dT).col[3]
+    output("误差：",posInaccuracy)
 
     # 实际转动各个关节
     for i in range(1,jointNumber+1) :
-        scene.objects["link"+str(i)].rotation_euler.z += diffradian
+        scene.objects["frame"+str(i)].rotation_euler.z += diffradian
 
 
 
-def testJacobian2():
+def testJacobian2(context):
+    T, θ = transformMatrixWithoutθ(1)
+    output("T =", T)
+    output(jointVarθ(1))
 
-    target = bpy.context.scene.objects["target"]
+    T = T.subs(θ, jointVarθ(1))  # 代入θ值
 
-    load("DH_helper").redrawGuide()
+    T2 = load("kinematics").T(1, 1)
 
-    moveTargetAlongsJoints(2)
-    output("target after =")
-    output(target.matrix_world)
-
-
-    global targetMatrixWorld
-
-    output("移动：",target.matrix_world.to_translation()-targetMatrixWorld.to_translation())
-    output(targetMatrixWorld.to_euler())
-    euler = eulerFromMatrix(target.matrix_world) - eulerFromMatrix(targetMatrixWorld)
-    output("转动：", euler, "x="+str(euler[0]/math.pi*180), "y="+str(euler[1]/math.pi*180), "z="+str(euler[2]/math.pi*180))
-
-
-    # global diffT
-    # output("x精度：",realDiffT.row[0][3]-diffT.row(0)[3])
-    # output("y精度：",realDiffT.row[1][3]-diffT.row(1)[3])
-    # output("z精度：",realDiffT.row[2][3]-diffT.row(2)[3])
-
+    output("T =", toBpy(T))
+    output("T2 =", T2)
 
 
 def eulerFromMatrix(m) :
