@@ -242,7 +242,7 @@ def moveTargetAlongsJoints(toJoints) :
 
 def formatMatrix(m) :
     for i in range(len(m)) :
-        if abs(m[i])<1e-7 :
+        if abs(m[i])<1e-5 :
             m[i] = 0
 def formatOutput(m) :
     formatMatrix(m)
@@ -301,15 +301,10 @@ def jacob0() :
     JN0[34] = T[9]
     JN0[35] = T[10]
 
-    return JN0 * JT
+    return (JN0*JT, T)
 
 
 def testJacobian(context):
-
-    J = jacob0()
-    formatOutput(J)
-
-    return
 
     output()
     output()
@@ -317,59 +312,78 @@ def testJacobian(context):
     target = context.scene.objects["target"]
     scene = context.scene
 
+
+    # # 微分运动前、后的末端位姿
+    # before = load("kinematics").fakeContextDHModule()
+    # newθ = [ getattr(before.scene, "joint"+str(i)+"_DH")[0] + (diffradian/math.pi*180) for i in range(1,7)]
+    # after = load("kinematics").fakeContextDHModule(newθ)
+    #
+    # beforeT = load("kinematics").T(1,jointNumber,before)
+    # afterT = load("kinematics").T(1,jointNumber,after)
+    #
+    # target.matrix_world = afterT
+
+    # changeT = afterT - beforeT
+    # output("changeT =",changeT)
+    # output("beforeT =", beforeT)
+
+    J, T = jacob0()
+    formatOutput(J)
+    formatOutput(J.inv())
+
+    dq = J.inv() * Matrix([1,1,1,0,0,0])
+    output("dq=",dq)
+
+    q = load("kinematics").q()
+    output("q=",q)
+
+    q2 = Matrix(q) + dq
+    output("q2 = ", q2)
+
+    output("T before", load("kinematics").forward( q ))
+    output("T after", load("kinematics").forward( q2 ))
+
+    output("change", load("kinematics").forward( q2 )-load("kinematics").forward( q ))
+
+
+
     # 重建DH模型
-    load("DH_helper").updateTheta(context)
+    # load("DH_helper").updateTheta(context)
+    # q = load("kinematics").q()
+    # output("q=",q)
+    #
+    #
+    # output(load("kinematics").fk(q))
+    # output( load("kinematics").fk( Matrix(q) + dq ) )
 
-    # 微分运动前、后的末端位姿
-    before = load("kinematics").fakeContextDHModule()
-    newθ = [ getattr(before.scene, "joint"+str(i)+"_DH")[0] + (diffradian/math.pi*180) for i in range(1,7)]
-    after = load("kinematics").fakeContextDHModule(newθ)
+    # dq = Matrix([diffradian for i in range(1, 7)])
+    # D = J * dq
+    # output("D = ",D)
+    #
+    # dx, dy, dz, δx, δy, δz = D.col(0)
+    # output("dx, dy, dz, δx, δy, δz = ",dx, dy, dz, δx, δy, δz)
+    #
+    # Δ = Matrix([
+    #     [  0, -δz,  δy, dx],
+    #     [ δz,   0, -δx, dy],
+    #     [-δy,  δx,   0, dz],
+    #     [  0,   0,   0,  0]
+    #     # [0,0,0,dx],
+    #     # [0,0,0,dy],
+    #     # [0,0,0,dz],
+    #     # [0,0,0,0],
+    # ])
+    # output("Δ = ",Δ)
+    #
+    # dT = Δ * T
+    # output("dT = ",dT)
 
-    beforeT = load("kinematics").T(1,jointNumber,before)
-    afterT = load("kinematics").T(1,jointNumber,after)
-
-    target.matrix_world = afterT
-
-    changeT = afterT - beforeT
-    output("changeT =",changeT)
-
-    output("beforeT =", beforeT)
-
-    JT = jacobN()
-    output("JT =", JT)
-
-    dθ = Matrix( [[diffradian] for i in range(jointNumber)] )
-    output("dθ=",dθ)
-
-    DT = JT * dθ
-
-    dx, dy, dz, δx, δy, δz = DT.col(0)
-    output("dx, dy, dz, δx, δy, δz = ",dx, dy, dz, δx, δy, δz)
-
-    ΔT = Matrix([
-        [  0, -δz,  δy, dx],
-        [ δz,   0, -δx, dy],
-        [-δy,  δx,   0, dz],
-        [  0,   0,   0,  0]
-        # [0,0,0,dx],
-        # [0,0,0,dy],
-        # [0,0,0,dz],
-        # [0,0,0,0],
-    ])
-    output("ΔT =",ΔT)
-
-    dT = T * ΔT
-    output("dT =", dT)
-
-    # target.matrix_world = toBpy(T0N)
-
-
-    posInaccuracy = changeT.col[3] - toBpy(dT).col[3]
-    output("误差：",posInaccuracy)
+    # posInaccuracy = changeT.col[3] - toBpy(dT).col[3]
+    # output("误差：",posInaccuracy)
 
     # 实际转动各个关节
-    for i in range(1,jointNumber+1) :
-        scene.objects["frame"+str(i)].rotation_euler.z += diffradian
+    # for i in range(1,jointNumber+1) :
+    #     scene.objects["frame"+str(i)].rotation_euler.z += diffradian
 
 
 

@@ -33,7 +33,7 @@ class ArmControlPanel(bpy.types.Panel):
         def posS() :
             load("DH_helper").setJoints((0, 0, -pi/2, 0,0,0))
         def posN() :
-            load("DH_helper").setJoints((0, pi/4, -pi, 0,pi/4,0))
+            load("DH_helper").setJoints((0, pi/4, pi, 0,pi/4,0))
         row = layout.row()
         row.operator(InitAllJointsValue.bl_idname, text="初始姿势") \
             .joint_idx = -1
@@ -79,19 +79,19 @@ class ArmControlPanel(bpy.types.Panel):
                 output(str(i-1)+"~"+str(i), load("DH_helper").formatMatrix(T))
 
         layout.separator()
-        func_operator(layout.row(), "正运动学变换", ("kinematics","forword")) \
-            ("目标归位", ("kinematics","forword"), args=[-1])
+        func_operator(layout.row(), "正运动学变换", ("kinematics","forwordTarget")) \
+            ("目标归位", ("kinematics","forwordTarget"), args=[-1])
         row = layout.row()
-        func_operator(row, "-1>0", ("kinematics","forword"), args=[0]) \
-            ("0-1", ("kinematics","forword"), args=[1]) \
-            ("6>7", ("kinematics","forword"), args=[7])
+        func_operator(row, "-1>0", ("kinematics","forwordTarget"), args=[0]) \
+            ("0-1", ("kinematics","forwordTarget"), args=[1]) \
+            ("6>7", ("kinematics","forwordTarget"), args=[7])
 
         row.prop(scene, "fkStartJoint", text="从关节")
         row.prop(scene, "fkEndJoint", text="到关节")
         func_operator(row, "正变换", lambda : load("kinematics").fkTransformation(scene.fkStartJoint,scene.fkEndJoint))
 
         func_operator(layout.row(), ">>>fk变换矩阵", outputForwardKinematics) \
-            (">>>ik noap", lambda : output(load("kinematics").ikTargetNOAP()) ) \
+            (">>>末端位姿(ik)", lambda : output(load("kinematics").T()) ) \
             (">>>ik求解", ("kinematics","inverse") )
         func_operator(layout.row(), ">>>DH常量", ("kinematics", "outputDHConst")) \
             (">>>target noap", lambda : output(context.scene.objects["target"].matrix_world) )

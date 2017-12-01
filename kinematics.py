@@ -40,14 +40,17 @@ def fkMatrixes(context=None) :
 
     return matrixes
 
-def fkJointMatrixe(jointN, context=None) :
+def fkJointMatrixe(jointN, context=None, Theta=None) :
 
     if context==None:
         context = bpy.context
 
     jointDHN = getattr(context.scene, "joint"+str(jointN)+"_DH")
 
-    θ = radians(jointDHN[0])
+    if Theta==None:
+        θ = radians(jointDHN[0])
+    else:
+        θ = Theta
     d = jointDHN[1]
     a = jointDHN[2]
     α = radians(jointDHN[3])
@@ -95,7 +98,7 @@ def noscale(matrix_world):
     invert_scale.invert()
     return matrix_world * invert_scale
 
-def forword(jointNum=None):
+def forwordTarget(jointNum=None):
 
     if not "target" in bpy.context.scene.objects :
         return
@@ -126,28 +129,9 @@ def forword(jointNum=None):
                 bpy.context.scene.objects["target"].matrix_world * fkMatrixes() [jointNum]
 
 
-# 完整的运动学变换过程如下：
-#   noap = T(-1,0) * T(0,1) * T(1,6) * T(6,7)
-# 在等式两边左乘 T(0,1)的逆矩阵，右乘 T(6,7)的逆矩阵
-# 这样就在右边消去了 T(0,1) 和 T(6,7)
-# 仅保留 关节1-6 的变换， 符合DH逆运动学 解析解 的求解过程
-#   => T(-1,0)(-1) * noap * T(6,7)(-1) = T(-1,0)(-1) * T(0,1) * T(1,6) * T(6,7) * T(6,7)(-1)
-#   => T(-1,0)(-1) * noap * T(6,7)(-1) = T(1,6)
-def ikTargetNOAP() :
-
-    matrixes = fkMatrixes()
-    T0 = matrixes[0]
-    T0.invert()
-    T7 = matrixes[7]
-    T7.invert()
-
-    return T0 * bpy.context.scene.objects["target"].matrix_world * T7
 
 
-def inverse():
-    ik_noap = ikTargetNOAP()
-
-    return
+def inverse(): pass
 
 
 def outputDHConst():
@@ -168,13 +152,43 @@ def outputDHConst():
         txt+= "d"+str(i) + "=" + str(d) + "\n"
         output(txt)
 
-def T(fromJoint, toJoint, context=None) :
-    t = fkJointMatrixe(fromJoint, context)
-    for i in range(fromJoint+1, toJoint+1) :
-        t*= fkJointMatrixe(i, context)
+def T(fromJoint=None, toJoint=None, context=None) :
+    if fromJoint==None:
+        fromJoint = 1
+    if toJoint==None:
+        toJoint = 6
+    t = Matrix([
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ])
+    for i in range(fromJoint, toJoint+1) :
+        TN = fkJointMatrixe(i, context)
+        t*= TN
+        output(i, TN)
     return t
 
 def fkTransformation(fromJoint, toJoint) :
     target = bpy.context.scene.objects["target"]
     target.matrix_world = target.matrix_world * T(fromJoint+1, toJoint)
     return
+
+def q():
+    q = []
+    for i in range(1,7):
+        agree = getattr(bpy.context.scene,"joint"+str(i)+"_DH")[0]
+        q.append( radians(agree) )
+    return q
+
+def forward(q) :
+    T =  Matrix([
+            [1,0,0,0] ,
+            [0,1,0,0] ,
+            [0,0,1,0] ,
+            [0,0,0,1] ,
+        ])
+    for i in range(len(q)):
+        TN = fkJointMatrixe(i+1, Theta=q[i])
+        T = T * TN
+    return T
