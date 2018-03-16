@@ -403,6 +403,9 @@ def setJoints(q) :
     for i in range(len(q)):
         params = getattr(bpy.context.scene,"joint"+str(i+1)+"_DH")
         params[0] = q[i]/math.pi * 180
+
+        setattr(bpy.context.scene,"joint"+str(i+1)+"_value", params[0])
+        
     applyDHModel(bpy.context)
 
 

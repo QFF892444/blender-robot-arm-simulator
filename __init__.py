@@ -28,16 +28,19 @@ class ArmControlPanel(bpy.types.Panel):
 
         scene = context.scene
 
+        def pos0() :
+            load("DH_helper").setJoints((0, 0, pi/2, 0,0,0))
         def posR() :
-            load("DH_helper").setJoints((0, pi/2, -pi/2, 0,0,0))
+            load("DH_helper").setJoints((0, pi/2, 0, 0,-pi/2,0))
         def posS() :
-            load("DH_helper").setJoints((0, 0, -pi/2, 0,0,0))
+            load("DH_helper").setJoints((0, 0, 0, 0,-pi/2,0))
         def posN() :
-            load("DH_helper").setJoints((0, pi/4, pi, 0,pi/4,0))
+            load("DH_helper").setJoints((0, pi/4, -pi/2, 0,-pi/4,0))
         row = layout.row()
-        row.operator(InitAllJointsValue.bl_idname, text="初始姿势") \
-            .joint_idx = -1
-        func_operator(row, "就绪姿势", posR) \
+        # row.operator(InitAllJointsValue.bl_idname, text="初始姿势") \
+        #     .joint_idx = -1
+        func_operator(row, "初始姿势", pos0) \
+                    ("就绪姿势", posR) \
                     ("伸展姿势", posS) \
                     ("灵巧姿势", posN)
 

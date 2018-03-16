@@ -258,7 +258,7 @@ def formatOutput(m) :
     output(text)
 
 
-    # 相对于末端坐标系的雅可比矩阵
+# 相对于末端坐标系的雅可比矩阵
 def jacob0() :
 
     # 构建相对于最后一个关节(而不是世界坐标系)的 Jacobian 矩阵
@@ -335,10 +335,10 @@ def testJacobian(context):
     output("dq=",dq)
 
     q = load("kinematics").q()
-    output("q=",q)
+    output("old q=",q)
 
     q2 = Matrix(q) + dq
-    output("q2 = ", q2)
+    output("new q = ", q2)
 
     output("T before", load("kinematics").forward( q ))
     output("T after", load("kinematics").forward( q2 ))
