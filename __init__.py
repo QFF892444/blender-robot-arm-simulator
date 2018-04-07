@@ -39,8 +39,7 @@ class ArmControlPanel(bpy.types.Panel):
         def posS() :
             load("DH_helper").setJoints((0, 0, 0, 0, 0, 0))
         def posN() :
-            # load("DH_helper").setJoints((0, pi/4, -pi/2, 0, -pi/4, 0))
-            load("DH_helper").setJoints((0, pi/4, 0, 0, -pi/4, 0))
+            load("DH_helper").setJoints((0, pi/4, -pi/2, 0, -pi/4, 0))
         row = layout.row()
         func_operator(row, "初始姿势", pos0) \
                     ("就绪姿势", posR) \
