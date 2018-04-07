@@ -28,27 +28,27 @@ class ArmControlPanel(bpy.types.Panel):
 
         scene = context.scene
 
+        # 四种姿态
         def pos0() :
             load("DH_helper").setJoints((0,0,0,0,0,0))
         def posR() :
-            load("DH_helper").setJoints((0, pi/2, -pi/2, 0,0,0))
+            load("DH_helper").setJoints((0, pi/2, 0, 0,0,0))
         def posS() :
-            load("DH_helper").setJoints((0, 0, -pi/2, 0, 0, 0))
+            load("DH_helper").setJoints((0, 0, 0, 0, 0, 0))
         def posN() :
-            load("DH_helper").setJoints((0, pi/4, -pi, 0, pi/4, 0))
+            load("DH_helper").setJoints((0, pi/4, -pi/2, 0, -pi/4, 0))
         row = layout.row()
-        # row.operator(InitAllJointsValue.bl_idname, text="初始姿势") \
-        #     .joint_idx = -1
         func_operator(row, "初始姿势", pos0) \
                     ("就绪姿势", posR) \
                     ("伸展姿势", posS) \
                     ("灵巧姿势", posN)
 
+        # 各个关节控制
         for i in range(1,7) :
             split = layout.split(percentage=0.15)
             op = split.column().operator(InitAllJointsValue.bl_idname, text="初始值") \
                             .joint_idx = i
-            split.column().prop(scene, "joint" + str(i) + "_value", text="关节" + str(i) + "角度值")
+            split.column().prop(scene, "joint" + str(i) + "_value", text="关节" + str(i) + "°")
 
         layout.separator()
 
@@ -57,12 +57,14 @@ class ArmControlPanel(bpy.types.Panel):
         func_operator(row, "标定DH模型", ("DH_helper", "measureDHModel"), passContext=True)
         func_operator(row, "应用DH模型", ("DH_helper", "applyDHModel"), passContext=True)
 
+        # DH 模型
         row = layout.row()
         row.label(" ")
         row.label("θ")
         row.label("d")
         row.label("a")
         row.label("α")
+        row.label("偏移")
         for i in range(1,7) :
             row = layout.row()
             # row.prop(scene, "joint"+str(i)+"_drawDHGuide", text="关节"+str(i))
@@ -107,36 +109,6 @@ class ArmControlPanel(bpy.types.Panel):
                         (">>>测试雅可比", ("jacobian", "testJacobian"), passContext=True) \
                         (">>>测试雅可比2", ("jacobian", "testJacobian2"), passContext=True)
 
-
-
-# class SetJointValue(bpy.types.Operator):
-#     bl_idname = "view3d.set_joint_value"
-#     bl_label = "Set Joint value"
-#     bl_options = {'REGISTER', 'UNDO'}
-#
-#     joint_index = IntProperty()
-#     request_position = StringProperty(default='middle')
-#
-#     def execute(self, context):
-#
-#         if self.request_position=="min" :
-#             value = - meta_joints[self.joint_index]['max']
-#         elif self.request_position=="middle" :
-#             value = 0
-#         elif self.request_position=="max" :
-#             value = meta_joints[self.joint_index]['max']
-#
-#         joint_name = "joint"+str(self.joint_index)+"_value"
-#         frameName = "frame" + str(self.joint_index)
-#
-#         context.scene.objects[frameName].rotation_euler[2] = math.radians(value)
-#         context.scene[joint_name] =
-# value
-#
-#         # 更新 D-H 辅助线
-#         load("DH_helper").redrawGuide()
-#
-#         return {"FINISHED"}
 
 
 class InitAllJointsValue(bpy.types.Operator):
@@ -222,10 +194,12 @@ def func_operator(row, text, func, passContext=False, options=None, args=[]) :
 
 
 
-
+# Theta值更新
 def createJointValueUpdate(jointIdx)  :
     def update(self, context) :
-        context.scene.objects["frame"+str(jointIdx)].rotation_euler[2] = math.radians( context.scene["joint"+str(jointIdx)+"_value"] )
+        dh = context.scene["joint"+str(jointIdx)+"_DH"]
+        theta = context.scene["joint"+str(jointIdx)+"_value"]
+        context.scene.objects["frame"+str(jointIdx)].rotation_euler[2] = math.radians( theta + dh[4] ) # 加上偏移值
         # 更新 D-H
         load("DH_helper").updateTheta(context)
     return update
@@ -272,13 +246,15 @@ def register():
     bpy.types.Scene.joint5_value = FloatProperty(update=meta_joints[5]["update"])
     bpy.types.Scene.joint6_value = FloatProperty(update=meta_joints[6]["update"])
 
-    bpy.types.Scene.joint0_DH = FloatVectorProperty(size=4, default=(0,0,0,0)) # alpha0, a0 一般习惯设定为0
-    bpy.types.Scene.joint1_DH = FloatVectorProperty(size=4)
-    bpy.types.Scene.joint2_DH = FloatVectorProperty(size=4)
-    bpy.types.Scene.joint3_DH = FloatVectorProperty(size=4)
-    bpy.types.Scene.joint4_DH = FloatVectorProperty(size=4)
-    bpy.types.Scene.joint5_DH = FloatVectorProperty(size=4)
-    bpy.types.Scene.joint6_DH = FloatVectorProperty(size=4)
+    # DH 模型
+    # size=5:  θ, d, a, α, offset
+    bpy.types.Scene.joint0_DH = FloatVectorProperty(size=5, default=(0,0,0,0,0)) # alpha0, a0 一般习惯设定为0
+    bpy.types.Scene.joint1_DH = FloatVectorProperty(size=5)
+    bpy.types.Scene.joint2_DH = FloatVectorProperty(size=5)
+    bpy.types.Scene.joint3_DH = FloatVectorProperty(size=5)
+    bpy.types.Scene.joint4_DH = FloatVectorProperty(size=5)
+    bpy.types.Scene.joint5_DH = FloatVectorProperty(size=5)
+    bpy.types.Scene.joint6_DH = FloatVectorProperty(size=5)
 
     bpy.types.Scene.jointsDifferentialMotion = FloatVectorProperty(size=6)
     bpy.types.Scene.fkStartJoint = IntProperty(default=1)
