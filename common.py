@@ -49,15 +49,34 @@ def auto_unregister(moduleName) :
         if "bl_idname" in dir(sth) and sth.__module__==moduleName :
             bpy.utils.unregister_class(sth)
 
+# 自动重新加载修改过的模块
 scriptcache = {}
 def load(name) :
+
+    global scriptcache
+
     modulename = __package__+"."+name
+
+    # 调用 importlib.find_loader() 前
+    # 需要先调用 importlib.import_module()
+    def getmtime():
+        loader = importlib.find_loader(modulename)
+        return loader.path_stats(loader.get_filename())["mtime"]
+
     if modulename in scriptcache:
-        if developing :
-            importlib.reload(scriptcache[modulename])
+        mtime = getmtime()
+        if scriptcache[modulename]["mtime"]!=mtime:
+            output("reload module", modulename, scriptcache[modulename]["m"])
+            
+            importlib.reload(scriptcache[modulename]["m"])
+            scriptcache[modulename]["mtime"] = mtime
     else:
-        scriptcache[modulename] = importlib.import_module(modulename)
-    return scriptcache[modulename]
+        scriptcache[modulename] = {
+            "m": importlib.import_module(modulename),
+            "mtime": getmtime()
+        }
+    
+    return scriptcache[modulename]["m"]
 
 
 # 是否为 坐标系前置

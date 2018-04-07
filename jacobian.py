@@ -14,6 +14,7 @@ def transformMatrixWithoutθ(jointN) :
 
     scene = bpy.context.scene
 
+    # 前置坐标系（改进型DH模型）
     if isPreposing():
         θN = Symbol("θ"+str(jointN))
         dN = Symbol("d"+str(jointN))
@@ -29,6 +30,7 @@ def transformMatrixWithoutθ(jointN) :
             [ sin(θN)*sin(αPre), cos(θN)*sin(αPre),  cos(αPre),  dN*cos(αPre) ],
             [                 0,                 0,          0,             1 ]
         ]), θN)
+    # 后置坐标系（标准DH模型）
     else :
         θ = Symbol("θ" + str(jointN))
         a = Symbol("a" + str(jointN))
@@ -101,6 +103,7 @@ def buildJacobianMatrixWithoutθ() :
             ])
 
         matrixes.append(T)
+    
 
     T06 = matrixes[0]*matrixes[1]*matrixes[2]*matrixes[3]*matrixes[4]*matrixes[5]
 
@@ -140,7 +143,9 @@ def buildJacobianMatrix() :
     global jacobianMatrix, jacobianVarsθ
 
     if jacobianMatrix==None:
+        output("构建jacobian矩阵")
         jacobianMatrix, jacobianVarsθ = buildJacobianMatrixWithoutθ()
+    
 
     # 微分运动
     start = time.time()
@@ -166,14 +171,16 @@ def makeDifferentialOperator(jacobian, dθ) :
     ])
 
 
-#
+# 去掉进度误差
 def formatNumber(num) :
     intpart = round(num)
     if abs(num-intpart) > 0.001 :
         return num
-    return num
+    return intpart
 
 
+# 移除乘法法运算中微小的部分
+# 浮点精度误差导致0变成非0项
 def trimExpressionMul(expression) :
     simpleExpress = []
     for item in expression.args :
@@ -188,7 +195,8 @@ def trimExpressionMul(expression) :
     return Mul(*simpleExpress)
 
 
-# 取消加法运算中微小的部分
+# 移除加法运算中微小的部分
+# 浮点精度误差导致0变成非0项
 def trimExpressionAdd(expression) :
 
     simpleExpress = []

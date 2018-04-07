@@ -15,6 +15,9 @@ importlib.reload(common)
 common.developing = True
 from .common import output, auto_register, auto_unregister, load
 
+
+
+
 class ArmControlPanel(bpy.types.Panel):
     """Creates a Panel in the scene context of the properties editor"""
     bl_label = "Robot Arm Control"
@@ -301,3 +304,9 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
+
+
+
+
+
