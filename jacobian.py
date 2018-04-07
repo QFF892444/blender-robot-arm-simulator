@@ -7,9 +7,14 @@ import mathutils
 import math, importlib
 
 
+pi2 = 2 * math.pi
 
+diffdis = 1
+diffradian = 0.1
+jointNumber = 6
 
-
+# 构建关节jointN的变换矩阵
+# 保留符号θ，其他参数带入实际值
 def transformMatrixWithoutθ(jointN) :
 
     scene = bpy.context.scene
@@ -56,6 +61,7 @@ def transformMatrixWithoutθ(jointN) :
 
 # 代入 α, a, d 常数，生成雅可比矩阵，
 # 不代入 θ 变量
+# 保留符号θ，其他参数带入实际值
 def buildJacobianMatrixWithoutθ() :
 
     matrixes = []
@@ -68,6 +74,7 @@ def buildJacobianMatrixWithoutθ() :
 
         jointDHN = getattr(bpy.context.scene, "joint"+str(i)+"_DH")
 
+        # 前置坐标系（改进型DH模型）
         if isPreposing() :
             jointDHPre = getattr(bpy.context.scene, "joint"+str(i-1)+"_DH")
 
@@ -83,6 +90,7 @@ def buildJacobianMatrixWithoutθ() :
                 [                   0,                    0,           0,               1 ]
             ])
 
+        # 后置坐标系（标准DH模型）
         else:
 
             a = formatNumber(jointDHN[0])
@@ -139,19 +147,22 @@ jacobianMatrix = None
 jacobianVarsθ = None
 
 
+# 构建 jacobian 
 def buildJacobianMatrix() :
     global jacobianMatrix, jacobianVarsθ
 
     if jacobianMatrix==None:
         output("构建jacobian矩阵")
         jacobianMatrix, jacobianVarsθ = buildJacobianMatrixWithoutθ()
-    
 
-    # 微分运动
+    output(jacobianMatrix)
+
+    # 带入各个关节 Theta值
     start = time.time()
     jacobian = jacobianMatrix.subs(jacobianVarsθ[0], jointVarθ(0))
     for i in range(1,6):
         jacobian = jacobian.subs( jacobianVarsθ[i], jointVarθ(i) )
+    output("sub θ 1-6", time.time() - start)
 
     return jacobian
 
@@ -161,6 +172,7 @@ def jointVarθ(jointIdx) :
     return radians(jointDH[0])
 
 # 微分算子
+# 关节微分运动 -> 末端微分位移
 def makeDifferentialOperator(jacobian, dθ) :
     D = jacobian * Matrix(dθ)
     return Matrix([
@@ -230,8 +242,6 @@ def outputDifferentialOperator():
     output("Δ = ", Δ)
 
 
-diffradian = 0.1
-jointNumber = 6
 
 
 def moveTargetAlongsJoints(toJoints) :
@@ -265,6 +275,44 @@ def formatOutput(m) :
 
     output(text)
 
+def formatRad(r) :
+    if abs(r)>pi2 :
+        r = r % pi2
+    if abs(r)<0.001 :
+        r= 0
+    return r
+
+# 在世界坐标系下，返回 工具中心点 到 目标之间的 位姿差异
+def diffTCP2Target():
+
+    objects = bpy.context.scene.objects
+    target = objects["target"]
+    z6 = objects["z6"]
+
+    # 位置
+    diffp = target.matrix_world - z6.matrix_world
+
+    # 姿态(转换为全局坐标)
+    z6r = z6.matrix_world.to_3x3()
+    z6r.invert()
+    r = target.matrix_world.to_3x3() * z6r
+    euler = r.to_euler()
+
+    return [
+        diffp[0][3],
+        diffp[1][3],
+        diffp[2][3],
+        formatRad( euler[0] ),
+        formatRad( euler[1] ),
+        formatRad( euler[2] )
+    ]
+
+# 将 diffTCP2Target() 保存到 scene ,并显示在插件界面上
+def takeDiffTCP2Target():
+    d = diffTCP2Target()
+    for i in range(0,6) :
+        bpy.context.scene.endDifferentialMotion[i] = d[i]
+
 
 # 相对于末端坐标系的雅可比矩阵
 def jacob0() :
@@ -288,7 +336,8 @@ def jacob0() :
         JT[4*jointNumber+i-1] = oz
         JT[5*jointNumber+i-1] = az
 
-    # JN0 = [ [ T.R zero3x3] [ zero3x3 T.R ] ]
+    # JN0 = [ [ T.R      zero3x3]
+    #         [ zero3x3  T.R    ] ]
     JN0 = zeros(6,6)
     JN0[0] = T[0]
     JN0[1] = T[1]
@@ -311,7 +360,7 @@ def jacob0() :
 
     return (JN0*JT, T)
 
-
+# 测试：用雅可比矩阵的逆，计算关节的微分转动
 def testJacobian(context):
 
     output()
@@ -320,26 +369,17 @@ def testJacobian(context):
     target = context.scene.objects["target"]
     scene = context.scene
 
-
-    # # 微分运动前、后的末端位姿
-    # before = load("kinematics").fakeContextDHModule()
-    # newθ = [ getattr(before.scene, "joint"+str(i)+"_DH")[0] + (diffradian/math.pi*180) for i in range(1,7)]
-    # after = load("kinematics").fakeContextDHModule(newθ)
-    #
-    # beforeT = load("kinematics").T(1,jointNumber,before)
-    # afterT = load("kinematics").T(1,jointNumber,after)
-    #
-    # target.matrix_world = afterT
-
-    # changeT = afterT - beforeT
-    # output("changeT =",changeT)
-    # output("beforeT =", beforeT)
-
     J, T = jacob0()
+    output("jacobian:")
     formatOutput(J)
+    output("jacobian inv:")
     formatOutput(J.inv())
 
-    dq = J.inv() * Matrix([1,1,1,0,0,0])
+    endp = bpy.context.scene.endDifferentialMotion
+    dp = Matrix(endp)
+    output("末端微分运动:",dp)
+
+    dq = J.inv() * dp
     output("dq=",dq)
 
     q = load("kinematics").q()
@@ -353,60 +393,53 @@ def testJacobian(context):
 
     output("change", load("kinematics").forward( q2 )-load("kinematics").forward( q ))
 
+    turnAllJoints(q2)
 
 
-    # 重建DH模型
-    # load("DH_helper").updateTheta(context)
-    # q = load("kinematics").q()
-    # output("q=",q)
-    #
-    #
-    # output(load("kinematics").fk(q))
-    # output( load("kinematics").fk( Matrix(q) + dq ) )
-
-    # dq = Matrix([diffradian for i in range(1, 7)])
-    # D = J * dq
-    # output("D = ",D)
-    #
-    # dx, dy, dz, δx, δy, δz = D.col(0)
-    # output("dx, dy, dz, δx, δy, δz = ",dx, dy, dz, δx, δy, δz)
-    #
-    # Δ = Matrix([
-    #     [  0, -δz,  δy, dx],
-    #     [ δz,   0, -δx, dy],
-    #     [-δy,  δx,   0, dz],
-    #     [  0,   0,   0,  0]
-    #     # [0,0,0,dx],
-    #     # [0,0,0,dy],
-    #     # [0,0,0,dz],
-    #     # [0,0,0,0],
-    # ])
-    # output("Δ = ",Δ)
-    #
-    # dT = Δ * T
-    # output("dT = ",dT)
-
-    # posInaccuracy = changeT.col[3] - toBpy(dT).col[3]
-    # output("误差：",posInaccuracy)
-
-    # 实际转动各个关节
-    # for i in range(1,jointNumber+1) :
-    #     scene.objects["frame"+str(i)].rotation_euler.z += diffradian
-
-
-
+# 测试：TCP(工具中心点)向目标位姿执行一次微分运动（很小幅度的位移和转动）
 def testJacobian2(context):
-    T, θ = transformMatrixWithoutθ(1)
-    output("T =", T)
-    output(jointVarθ(1))
 
-    T = T.subs(θ, jointVarθ(1))  # 代入θ值
+    # tcp 到 target 距离
+    d = Matrix(diffTCP2Target())
 
-    T2 = load("kinematics").T(1, 1)
+    # 移动
+    dt = mathutils.Vector((d[0], d[1], d[2]))
+    if abs(dt.magnitude) > diffdis :
+        dt*= (diffdis/dt.magnitude)
+        d[0] = dt[0]
+        d[1] = dt[1]
+        d[2] = dt[2]
 
-    output("T =", toBpy(T))
-    output("T2 =", T2)
+    # 转动
+    for i in range(3,6) :
+        if abs(d[i]) > diffradian :
+            d[i] = diffradian * (d[i]/abs(d[i]))
 
+    # 更新界面
+    for i in range(0,6) :
+        bpy.context.scene.endDifferentialMotion[i] = d[i]
+
+    J, T = jacob0()
+
+    dq = J.inv() * d
+    q = load("kinematics").q()
+
+    turnAllJoints( Matrix(q) + dq )
+
+
+
+def turnAllJoints(dq) :
+
+    scene = bpy.context.scene
+
+    # 执行关节的微分运动
+    for n in range(1,7):
+        dh = scene["joint"+str(n)+"_DH"]
+        scene["joint"+str(n)+"_value"] = math.degrees(dq[n-1]) + dh[4] # 加上偏移值
+        scene.objects["frame"+str(n)].rotation_euler[2] = dq[n-1]
+
+    # 更新 DH 模型中的 Theta 值
+    load("DH_helper").updateTheta(bpy.context)
 
 def eulerFromMatrix(m) :
     euler = m.to_euler()

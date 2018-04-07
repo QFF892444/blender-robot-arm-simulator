@@ -39,7 +39,8 @@ class ArmControlPanel(bpy.types.Panel):
         def posS() :
             load("DH_helper").setJoints((0, 0, 0, 0, 0, 0))
         def posN() :
-            load("DH_helper").setJoints((0, pi/4, -pi/2, 0, -pi/4, 0))
+            # load("DH_helper").setJoints((0, pi/4, -pi/2, 0, -pi/4, 0))
+            load("DH_helper").setJoints((0, pi/4, 0, 0, -pi/4, 0))
         row = layout.row()
         func_operator(row, "初始姿势", pos0) \
                     ("就绪姿势", posR) \
@@ -105,13 +106,16 @@ class ArmControlPanel(bpy.types.Panel):
             (">>>target noap", lambda : output(context.scene.objects["target"].matrix_world) )
 
         layout.separator()
+        layout.row().label("关节微分运动:")
+        layout.row().prop(scene, "jointsDifferentialMotion", text="")
         row = layout.row()
-        row.prop(scene, "jointsDifferentialMotion", text="微分运动")
+        row.label("末端微分运动:")
+        func_operator(row, "计算微分运动", ('jacobian', 'takeDiffTCP2Target'))
+        layout.row().prop(scene, "endDifferentialMotion", text="")
         func_operator(layout.row(), ">>>雅可比矩阵", ("jacobian", "outputJacobianMatrix")) \
-                        (">>>微分算子Δ", ("jacobian", "outputDifferentialOperator")) \
-                        (">>>测试雅可比", ("jacobian", "testJacobian"), passContext=True) \
-                        (">>>测试雅可比2", ("jacobian", "testJacobian2"), passContext=True)
-
+                        (">>>微分算子Δ", ("jacobian", "outputDifferentialOperator"))
+        func_operator(layout.row(), "测试微分运动", ("jacobian", "testJacobian"), passContext=True) \
+                        ("单步微分运动(TCP > 目标)", ("jacobian", "testJacobian2"), passContext=True) 
 
 
 class InitAllJointsValue(bpy.types.Operator):
@@ -259,17 +263,17 @@ def register():
     bpy.types.Scene.joint5_DH = FloatVectorProperty(size=5)
     bpy.types.Scene.joint6_DH = FloatVectorProperty(size=5)
 
+    # 各关节微分运动
     bpy.types.Scene.jointsDifferentialMotion = FloatVectorProperty(size=6)
+    # 末端微分运动
+    bpy.types.Scene.endDifferentialMotion = FloatVectorProperty(size=6, default=(0,0,0,0,0,0))
+    # 参与正运动学计算的关节
     bpy.types.Scene.fkStartJoint = IntProperty(default=1)
     bpy.types.Scene.fkEndJoint = IntProperty(default=6)
 
+    # 是否 坐标系前置（改进型DH模型）
+    bpy.types.Scene.preposingAxesZ = BoolProperty(default=False)
 
-    bpy.types.Scene.preposingAxesZ = BoolProperty(default=True)
-
-    # bpy.types.Scene.DH_a = FloatVectorProperty(size=6)
-    # bpy.types.Scene.DH_alpha = FloatVectorProperty(size=6)
-    # bpy.types.Scene.DH_d = FloatVectorProperty(size=6)
-    # bpy.types.Scene.DH_theta = FloatVectorProperty(size=6)
 
     def DHGuideUpdate(self, context):
         load("DH_helper").redrawGuide()

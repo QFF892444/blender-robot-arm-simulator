@@ -174,6 +174,7 @@ def fkTransformation(fromJoint, toJoint) :
     target.matrix_world = target.matrix_world * T(fromJoint+1, toJoint)
     return
 
+# 各个关节的 theta 弧度值
 def q():
     q = []
     for i in range(1,7):
